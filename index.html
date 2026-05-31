@@ -227,7 +227,7 @@ let pendingDrag=null,mopDrag=null,mopHandleX=0,evapParticles=[];
 let soundEnabled=true;
 let titleRain=[],titleRainInited=false;
 let _titleStartBtnRect={x:0,y:0,w:0,h:0},_titleHowtoBtnRect={x:0,y:0,w:0,h:0};
-let highScore=parseInt(localStorage.getItem('rainDrainHi')||'0');
+let highScore=parseInt(sessionStorage.getItem('rainDrainHi')||'0');
 let lastScore=0,isNewHigh=false;
 
 function getBW(){return CELL*2.4;}
@@ -259,7 +259,7 @@ function genCracks(){
 function setGameOver(){
   lastScore=score;
   isNewHigh=score>highScore;
-  if(isNewHigh){highScore=score;localStorage.setItem('rainDrainHi',highScore);}
+  if(isNewHigh){highScore=score;sessionStorage.setItem('rainDrainHi',highScore);}
   window.parent.postMessage({type:'gameOver',score:score},'*');
   scene='over';overT=0;playSE('over');
 }
