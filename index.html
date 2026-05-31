@@ -1527,7 +1527,10 @@ function _drawTitleBtn(x,y,w,h,label,isPrimary,pulse){
     ctx.fillStyle=`rgba(160,230,255,${0.7+pulse*0.3})`;
   }
   ctx.textAlign='center';
-  ctx.font=`bold ${Math.floor(h*0.48)}px Arial`;
+  let fsz=Math.floor(h*0.48);
+  ctx.font=`bold ${fsz}px Arial`;
+  const maxTw=w*0.82;
+  while(ctx.measureText(label).width>maxTw&&fsz>10){fsz--;ctx.font=`bold ${fsz}px Arial`;}
   ctx.fillText(label,x+w/2,y+h*0.65);
   ctx.restore();
 }
