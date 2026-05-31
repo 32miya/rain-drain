@@ -981,7 +981,7 @@ function drawRoom(){
     ctx.strokeStyle=`rgba(120,190,255,${rp.alpha})`;ctx.lineWidth=1.5;
     ctx.beginPath();ctx.ellipse(rp.x,rp.y,rp.r,rp.r*0.30,0,0,Math.PI*2);ctx.stroke();
   }
-  for(const si of spawnedItems)drawSpawnedItem(si);
+  for(let i=0;i<spawnedItems.length;i++)drawSpawnedItem(spawnedItems[i],dragging&&draggingItemIdx===i);
   // Splash particles
   for(const p of splashParticles){
     const col=p.isBucket?`rgba(88,175,255,${p.alpha})`:`rgba(60,130,210,${p.alpha})`;
@@ -1066,7 +1066,7 @@ function drawRoom(){
       ctx.fillText('雑巾がけ',hx,hy-hh/2-5);
     }
   }
-  drawBucket();drawDumpBtn();
+  drawBucket(dragging&&draggingItemIdx===-1);drawDumpBtn();
   if(floorWater>0.65&&Math.floor(t*3)%2===0){
     ctx.textAlign='center';ctx.fillStyle='rgba(255,60,60,0.9)';
     ctx.font=`bold ${Math.floor(ROOM_H*0.14)}px Arial`;
@@ -1074,7 +1074,7 @@ function drawRoom(){
   }
 }
 
-function drawSpawnedItem(si){
+function drawSpawnedItem(si,isSelected){
   const iw=getItemW(si.type),ih=getItemH(si.type),ix=si.x,iy=si.y;
   const fill=si.water/si.max,isTub=si.type==='tub';
   // wide mouth at top (iy-ih), narrow base at bottom (iy)
@@ -1085,10 +1085,11 @@ function drawSpawnedItem(si){
     ?['#4a3806','#886a0c','#e8ca3c','#886a0c','#3a2a04']
     :['#1c3010','#355820','#80ba46','#3a5e16','#152008'];
   ctx.save();
+  if(isSelected)ctx.translate(0,-7);
 
-  // drop shadow
+  // drop shadow (larger/lower when lifted)
   ctx.fillStyle='rgba(0,0,0,0.18)';
-  ctx.beginPath();ctx.ellipse(ix,iy+3,iw*0.36,iw*0.055,0,0,Math.PI*2);ctx.fill();
+  ctx.beginPath();ctx.ellipse(ix,iy+(isSelected?10:3),iw*(isSelected?0.44:0.36),iw*(isSelected?0.072:0.055),0,0,Math.PI*2);ctx.fill();
 
   // ── body (wide top, narrow bottom) ──
   ctx.save();
@@ -1185,10 +1186,26 @@ function drawSpawnedItem(si){
   ctx.fillStyle='rgba(255,255,255,0.50)';ctx.textAlign='center';
   ctx.font=`${Math.floor(ih*0.20)}px Arial`;ctx.fillText(si.label,ix,iy-ih*0.55+rimRy);
 
+  // ── 選択中: 黄色ハロー + アイテム名バッジ ──
+  if(isSelected){
+    ctx.save();
+    ctx.shadowColor='rgba(255,225,50,0.95)';ctx.shadowBlur=18;
+    ctx.strokeStyle='rgba(255,225,50,0.88)';ctx.lineWidth=2.8;
+    ctx.beginPath();ctx.ellipse(ix,iy-ih+rimRy,iw/2+5,rimRy+2.5,0,0,Math.PI*2);ctx.stroke();
+    ctx.restore();
+    const fsz=Math.max(11,Math.floor(CELL*0.62));
+    // badge background
+    ctx.fillStyle='rgba(0,0,0,0.58)';
+    ctx.beginPath();ctx.roundRect(ix-fsz*1.6,iy-ih-fsz-16,fsz*3.2,fsz+8,4);ctx.fill();
+    ctx.textAlign='center';
+    ctx.fillStyle='#ffe840';ctx.font=`bold ${fsz}px Arial`;
+    ctx.fillText(si.label,ix,iy-ih-14);
+  }
+
   ctx.restore();
 }
 
-function drawBucket(){
+function drawBucket(isSelected){
   const bw=getBW(),bh=getBH(),bx=bucket.x,by=BUCKET_FLOOR_Y-bh;
   // wide mouth at top (by), narrow base at bottom (by+bh)
   const btw=bw*0.68,rimRy=Math.max(4,bw*0.095),botRy=Math.max(2,btw*0.075);
@@ -1201,11 +1218,11 @@ function drawBucket(){
     ctx.translate(bx+bw/2+sx,by+rimRy);ctx.rotate(ang);ctx.translate(-(bx+bw/2),-by-rimRy);
     ctx.fillStyle=`rgba(80,160,240,${0.65*(1-bucket.dumpT/0.65)})`;
     for(let i=0;i<5;i++){const sp=bucket.dumpT/0.65;ctx.beginPath();ctx.ellipse(bx-bw*0.35+i*bw*0.2+Math.sin(i*1.3)*bw*0.12,by-sp*bh*0.45-i*8*sp,4,3,0,0,Math.PI*2);ctx.fill();}
-  }else ctx.translate(sx,0);
+  }else ctx.translate(sx,isSelected?-7:0);
 
-  // drop shadow
+  // drop shadow (larger/lower when lifted)
   ctx.fillStyle='rgba(0,0,0,0.20)';
-  ctx.beginPath();ctx.ellipse(bx,BUCKET_FLOOR_Y+4,bw*0.38,bw*0.065,0,0,Math.PI*2);ctx.fill();
+  ctx.beginPath();ctx.ellipse(bx,BUCKET_FLOOR_Y+(isSelected?11:4),bw*(isSelected?0.48:0.38),bw*(isSelected?0.085:0.065),0,0,Math.PI*2);ctx.fill();
 
   // ── body (wide top, narrow bottom) ──
   ctx.save();
@@ -1296,6 +1313,21 @@ function drawBucket(){
       const sz=overflow*(2.8+Math.sin(t*10+i*2.4)*1.4);
       if(sz>0.5){ctx.beginPath();ctx.ellipse(rx,by+rimRy*2+sz*0.6,2,sz,0,0,Math.PI*2);ctx.fill();}
     }
+  }
+
+  // ── 選択中: 黄色ハロー + 「バケツ」バッジ ──
+  if(isSelected&&!bucket.dumping){
+    ctx.save();
+    ctx.shadowColor='rgba(255,225,50,0.95)';ctx.shadowBlur=18;
+    ctx.strokeStyle='rgba(255,225,50,0.88)';ctx.lineWidth=2.8;
+    ctx.beginPath();ctx.ellipse(bx,by+rimRy,bw/2+5,rimRy+2.5,0,0,Math.PI*2);ctx.stroke();
+    ctx.restore();
+    const fsz=Math.max(11,Math.floor(CELL*0.62));
+    ctx.fillStyle='rgba(0,0,0,0.58)';
+    ctx.beginPath();ctx.roundRect(bx-fsz*1.6,by-fsz-16,fsz*3.2,fsz+8,4);ctx.fill();
+    ctx.textAlign='center';
+    ctx.fillStyle='#ffe840';ctx.font=`bold ${fsz}px Arial`;
+    ctx.fillText('バケツ',bx,by-14);
   }
 
   ctx.restore();
