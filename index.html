@@ -503,7 +503,7 @@ function draw(){
   }
   // ── 音量ON/OFFボタン（右上隅・最前面）──
   {
-    const sbcx=W-18,sbcy=70,sbr=14;
+    const sbcx=W-18,sbcy=98,sbr=14;
     ctx.fillStyle='rgba(0,0,0,0.48)';
     ctx.beginPath();ctx.arc(sbcx,sbcy,sbr,0,Math.PI*2);ctx.fill();
     ctx.strokeStyle=soundEnabled?'rgba(160,255,160,0.65)':'rgba(255,120,120,0.65)';
@@ -1819,7 +1819,7 @@ function onDown(e){
   e.preventDefault();initAudio();
   const pos=getPos(e);
   // 音量ボタン（常に最優先）
-  if(Math.hypot(pos.x-(W-18),pos.y-70)<20){soundEnabled=!soundEnabled;return;}
+  if(Math.hypot(pos.x-(W-18),pos.y-98)<20){soundEnabled=!soundEnabled;return;}
   if(scene==='title'){
     const r=_titleHowtoBtnRect;
     if(pos.x>=r.x&&pos.x<=r.x+r.w&&pos.y>=r.y&&pos.y<=r.y+r.h){scene='howto';return;}
