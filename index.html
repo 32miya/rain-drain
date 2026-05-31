@@ -107,6 +107,9 @@ layout();
 window.addEventListener('resize',()=>{layout();});
 if(window.visualViewport){window.visualViewport.addEventListener('resize',()=>{layout();});}
 
+// ═══ TITLE BACKGROUND IMAGE ══════════════════════
+const titleBg=new Image();titleBg.src='title-bg.png';
+
 // ═══ AUDIO ═══════════════════════════════════════
 let AC=null;
 function initAudio(){
@@ -1472,15 +1475,101 @@ function drawItemButtons(){
 }
 
 function drawTitle(){
-  ctx.fillStyle='rgba(0,0,0,0.70)';ctx.fillRect(0,0,W,H);
-  ctx.textAlign='center';const cy=H*0.17;
-  ctx.fillStyle='#f0d078';ctx.shadowColor='#c07818';ctx.shadowBlur=26;
-  ctx.font=`bold ${Math.floor(W*0.14)}px Arial`;ctx.fillText('雨漏り',W/2,cy);
-  ctx.font=`bold ${Math.floor(W*0.090)}px Arial`;ctx.fillText('パニック！',W/2,cy+W*0.12);
-  ctx.shadowBlur=0;ctx.font=`${Math.floor(W*0.040)}px Arial`;ctx.fillStyle='#d0c090';
-  ['天井パイプが自動で回転→雨漏り出口が変化','バケツをドラッグして雨水をキャッチ','満水になったら「水を捨てる」ボタンを押す','下のボタンでバケツ・タライを追加配備！','全コンテナは自由にドラッグ移動できる','床が水浸しになったらゲームオーバー'].forEach((l,i)=>ctx.fillText(l,W/2,H*0.42+i*W*0.062));
-  ctx.globalAlpha=0.75+Math.sin(titleT*3.5)*0.25;ctx.fillStyle='#ffd060';
-  ctx.font=`bold ${Math.floor(W*0.058)}px Arial`;ctx.fillText('タップでスタート',W/2,H*0.91);ctx.globalAlpha=1;
+  // ── 背景画像（coverスタイル） ──
+  if(titleBg.complete&&titleBg.naturalWidth){
+    const s=Math.max(W/titleBg.naturalWidth,H/titleBg.naturalHeight);
+    const dw=titleBg.naturalWidth*s,dh=titleBg.naturalHeight*s;
+    ctx.drawImage(titleBg,(W-dw)/2,(H-dh)/2,dw,dh);
+  }else{
+    ctx.fillStyle='#2a4a18';ctx.fillRect(0,0,W,H);
+  }
+
+  // ── 上部グラデーションオーバーレイ（タイトル可読性） ──
+  const tg=ctx.createLinearGradient(0,0,0,H*0.44);
+  tg.addColorStop(0,'rgba(0,8,20,0.82)');tg.addColorStop(1,'rgba(0,8,20,0)');
+  ctx.fillStyle=tg;ctx.fillRect(0,0,W,H*0.44);
+
+  // ── 下部グラデーションオーバーレイ（ボタン可読性） ──
+  const bg2=ctx.createLinearGradient(0,H*0.52,0,H);
+  bg2.addColorStop(0,'rgba(0,8,20,0)');bg2.addColorStop(0.5,'rgba(0,8,20,0.72)');bg2.addColorStop(1,'rgba(0,8,20,0.92)');
+  ctx.fillStyle=bg2;ctx.fillRect(0,H*0.52,W,H*0.48);
+
+  // ── タイトルロゴ ──
+  ctx.textAlign='center';
+  const t1sz=Math.floor(W*0.175);
+  // 「雨漏り」
+  ctx.save();
+  ctx.shadowColor='rgba(30,160,255,0.9)';ctx.shadowBlur=28;
+  ctx.fillStyle='#e8f8ff';
+  ctx.font=`bold ${t1sz}px Arial`;ctx.fillText('雨漏り',W/2,H*0.14+t1sz);
+  ctx.restore();
+  // 外枠ストローク
+  ctx.save();
+  ctx.strokeStyle='rgba(60,180,255,0.55)';ctx.lineWidth=3;
+  ctx.font=`bold ${t1sz}px Arial`;ctx.strokeText('雨漏り',W/2,H*0.14+t1sz);
+  ctx.restore();
+
+  const t2sz=Math.floor(W*0.118);
+  const t2y=H*0.14+t1sz+t2sz*1.05;
+  // 「パニック！」
+  ctx.save();
+  ctx.shadowColor='rgba(0,200,255,0.85)';ctx.shadowBlur=24;
+  ctx.fillStyle='#70e0ff';
+  ctx.font=`bold ${t2sz}px Arial`;ctx.fillText('パニック！',W/2,t2y);
+  ctx.restore();
+  ctx.save();
+  ctx.strokeStyle='rgba(0,120,200,0.45)';ctx.lineWidth=2.5;
+  ctx.font=`bold ${t2sz}px Arial`;ctx.strokeText('パニック！',W/2,t2y);
+  ctx.restore();
+
+  // ── キャッチコピー ──
+  const tagY=t2y+Math.floor(W*0.068);
+  ctx.fillStyle='rgba(220,245,255,0.82)';
+  ctx.font=`${Math.floor(W*0.042)}px Arial`;
+  ctx.fillText('☔ 雨漏りをバケツで受け止めろ！ ☔',W/2,tagY);
+
+  // ── スタートボタン ──
+  const btnW=Math.floor(W*0.76),btnH=Math.floor(H*0.092);
+  const btnX=(W-btnW)/2,btnY=H*0.75;
+  const pulse=0.75+Math.sin(titleT*3.2)*0.25;
+
+  // glow halo
+  ctx.save();
+  ctx.shadowColor=`rgba(0,200,255,${pulse*0.70})`;ctx.shadowBlur=22;
+  ctx.strokeStyle=`rgba(100,230,255,${pulse*0.55})`;ctx.lineWidth=6;
+  ctx.beginPath();ctx.roundRect(btnX-3,btnY-3,btnW+6,btnH+6,btnH/2+3);ctx.stroke();
+  ctx.restore();
+
+  // body
+  const bgrad=ctx.createLinearGradient(btnX,btnY,btnX,btnY+btnH);
+  bgrad.addColorStop(0,`rgba(20,190,255,${0.90+pulse*0.10})`);
+  bgrad.addColorStop(1,`rgba(0,100,210,${0.90+pulse*0.10})`);
+  ctx.fillStyle=bgrad;
+  ctx.beginPath();ctx.roundRect(btnX,btnY,btnW,btnH,btnH/2);ctx.fill();
+
+  // inner highlight
+  ctx.fillStyle='rgba(255,255,255,0.20)';
+  ctx.beginPath();ctx.roundRect(btnX+5,btnY+4,btnW-10,btnH*0.40,btnH/2-2);ctx.fill();
+
+  // border
+  ctx.strokeStyle=`rgba(180,245,255,${0.65+pulse*0.35})`;ctx.lineWidth=2;
+  ctx.beginPath();ctx.roundRect(btnX,btnY,btnW,btnH,btnH/2);ctx.stroke();
+
+  // text
+  ctx.save();
+  ctx.shadowColor='rgba(0,80,180,0.8)';ctx.shadowBlur=8;
+  ctx.fillStyle='#ffffff';
+  ctx.font=`bold ${Math.floor(btnH*0.50)}px Arial`;
+  ctx.fillText('▶  タップでスタート',W/2,btnY+btnH*0.65);
+  ctx.restore();
+
+  // ── 操作説明（小文字） ──
+  const infoFsz=Math.floor(W*0.036);
+  ctx.fillStyle='rgba(190,225,255,0.72)';
+  ctx.font=`${infoFsz}px Arial`;
+  ['バケツをドラッグして雨水をキャッチ','満水になったら「水を捨てる」ボタン','床が水浸しになったらゲームオーバー'].forEach((l,i)=>{
+    ctx.fillText(l,W/2,btnY+btnH+infoFsz*1.6*(i+1));
+  });
 }
 
 function drawGameOver(){
