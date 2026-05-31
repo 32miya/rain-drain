@@ -471,6 +471,19 @@ function draw(){
     ctx.fillStyle=`rgba(195,220,255,${lightningFlash*(weatherIdx===3?0.16:0.09)})`;
     ctx.fillRect(0,0,W,H);
   }
+  // ── スコア・生存時間（最前面）──
+  if(scene==='play'){
+    ctx.textAlign='right';
+    ctx.fillStyle='rgba(0,0,0,0.42)';
+    const fsz=Math.max(12,Math.floor(BAR_H*0.15));
+    ctx.font=`bold ${fsz}px Arial`;
+    ctx.fillText(`${score}pt`,W-6,BAR_H*0.62+2);
+    ctx.fillStyle='#d8f0c0';ctx.fillText(`${score}pt`,W-8,BAR_H*0.62);
+    const fsz2=Math.max(10,Math.floor(BAR_H*0.13));
+    ctx.font=`${fsz2}px Arial`;
+    ctx.fillStyle='rgba(0,0,0,0.38)';ctx.fillText(`${Math.floor(timer)}s`,W-6,BAR_H*0.78+2);
+    ctx.fillStyle='#a0c890';ctx.fillText(`${Math.floor(timer)}s`,W-8,BAR_H*0.78);
+  }
 }
 
 function drawTopBar(){
@@ -638,11 +651,7 @@ function drawTopBar(){
     ctx.fillText('⚠ 大雨注意報',W-8,alertY);
   }
 
-  // Score / time
-  ctx.textAlign='right';ctx.fillStyle='#c8e0b8';ctx.font=`bold ${Math.floor(BAR_H*0.15)}px Arial`;
-  ctx.fillText(`${score}pt`,W-8,BAR_H*0.62);
-  ctx.fillStyle='#809880';ctx.font=`${Math.floor(BAR_H*0.13)}px Arial`;
-  ctx.fillText(`${Math.floor(timer)}s`,W-8,BAR_H*0.78);
+  // Score / time → draw() 最後に移動済み
 
   // Weather change warning
   if(weatherIdx<3&&weatherTimer<5&&Math.floor(t*4)%2===0){
@@ -789,51 +798,18 @@ function drawCeiling(){
   }
   ctx.fillStyle='rgba(0,0,0,0.14)';ctx.fillRect(GX-2,GRID_TOP-2,COLS*CELL+4,ROWS*CELL+4);
   for(let r=0;r<ROWS;r++)for(let c=0;c<COLS;c++)drawPipeCell(r,c);
-  // パイプ出口: 大型水滴 + 落下ドリップとの水柱ライン
+  // パイプ出口の垂れ下がり大型水滴（天井エリアのみ）
   const curExits=getExits();
   for(const ec of curExits){
     const dx=GX+ec*CELL+CELL/2,dy=GRID_TOP+ROWS*CELL;
-    // 落下中ドリップがこの出口に紐づく場合、水柱ラインを描画
-    for(const d of drips){
-      if(Math.abs(d.x-dx)<CELL*0.6){
-        const lg=ctx.createLinearGradient(dx,dy,dx,d.y);
-        lg.addColorStop(0,'rgba(100,190,255,0.30)');
-        lg.addColorStop(1,'rgba(60,140,240,0.04)');
-        ctx.fillStyle=lg;ctx.fillRect(dx-2.5,dy,5,d.y-dy);
-      }
-    }
-    // 出口の垂れ下がり大型水滴（テアドロップ型）
     const hang=3+Math.sin(t*4.2+ec*0.8)*2;
     const rr=3.5+Math.sin(t*3.8+ec*1.2)*1.0;
     const wg=ctx.createRadialGradient(dx-rr*0.3,dy+hang-rr*0.3,rr*0.1,dx,dy+hang,rr*1.5);
-    wg.addColorStop(0,'rgba(255,255,255,0.95)');
-    wg.addColorStop(0.3,'rgba(160,225,255,0.88)');
-    wg.addColorStop(0.7,'rgba(65,148,248,0.75)');
-    wg.addColorStop(1,'rgba(30,90,210,0)');
+    wg.addColorStop(0,'rgba(255,255,255,0.95)');wg.addColorStop(0.3,'rgba(160,225,255,0.88)');
+    wg.addColorStop(0.7,'rgba(65,148,248,0.75)');wg.addColorStop(1,'rgba(30,90,210,0)');
     ctx.fillStyle=wg;ctx.beginPath();ctx.ellipse(dx,dy+hang,rr*0.75,rr,0,0,Math.PI*2);ctx.fill();
-    // ハイライト
     ctx.fillStyle='rgba(255,255,255,0.70)';
     ctx.beginPath();ctx.ellipse(dx-rr*0.25,dy+hang-rr*0.3,rr*0.28,rr*0.18,Math.PI*0.6,0,Math.PI*2);ctx.fill();
-  }
-  for(const d of drips){
-    ctx.save();
-    // 尾引きストリーク
-    const tailLen=d.r*4.0+(d.vy||100)*0.010;
-    ctx.strokeStyle='rgba(140,215,255,0.50)';
-    ctx.lineWidth=d.r*0.85;ctx.lineCap='round';
-    ctx.beginPath();ctx.moveTo(d.x,d.y-tailLen);ctx.lineTo(d.x,d.y-d.r*0.9);ctx.stroke();
-    // 本体（涙型）
-    const dg=ctx.createRadialGradient(d.x-d.r*0.28,d.y-d.r*0.28,d.r*0.1,d.x,d.y+d.r*0.2,d.r*1.35);
-    dg.addColorStop(0,'rgba(255,255,255,0.98)');
-    dg.addColorStop(0.22,'rgba(185,238,255,0.94)');
-    dg.addColorStop(0.60,'rgba(65,148,248,0.88)');
-    dg.addColorStop(1,'rgba(25,85,210,0)');
-    ctx.fillStyle=dg;
-    ctx.beginPath();ctx.ellipse(d.x,d.y,d.r*0.72,d.r*1.18,0,0,Math.PI*2);ctx.fill();
-    // ハイライト
-    ctx.fillStyle='rgba(255,255,255,0.82)';
-    ctx.beginPath();ctx.ellipse(d.x-d.r*0.22,d.y-d.r*0.30,d.r*0.28,d.r*0.16,Math.PI*0.65,0,Math.PI*2);ctx.fill();
-    ctx.restore();
   }
   ctx.fillStyle='rgba(0,0,0,0.30)';ctx.fillRect(0,BAR_H+CEIL_H-5,W,5);
 }
@@ -938,6 +914,33 @@ function drawRoom(){
   drawRoomDecor();
   ctx.strokeStyle='rgba(0,0,0,0.10)';ctx.lineWidth=1;
   for(let i=0;i<4;i++){const ly=ROOM_TOP+i*(ROOM_H/4);ctx.beginPath();ctx.moveTo(0,ly);ctx.lineTo(W,ly);ctx.stroke();}
+  // ── 雫: 水柱ライン + 本体（部屋背景の上に描画）──
+  {
+    const cExits=getExits();
+    for(const ec of cExits){
+      const dx=GX+ec*CELL+CELL/2,dy=GRID_TOP+ROWS*CELL;
+      for(const d of drips){
+        if(Math.abs(d.x-dx)<CELL*0.6&&d.y>ROOM_TOP){
+          const lg=ctx.createLinearGradient(dx,ROOM_TOP,dx,d.y);
+          lg.addColorStop(0,'rgba(100,190,255,0.08)');lg.addColorStop(1,'rgba(80,160,240,0.22)');
+          ctx.fillStyle=lg;ctx.fillRect(dx-3,ROOM_TOP,6,d.y-ROOM_TOP);
+        }
+      }
+    }
+    for(const d of drips){
+      ctx.save();
+      const tailLen=d.r*4.5+(d.vy||100)*0.012;
+      ctx.strokeStyle='rgba(140,215,255,0.52)';ctx.lineWidth=d.r*0.88;ctx.lineCap='round';
+      ctx.beginPath();ctx.moveTo(d.x,d.y-tailLen);ctx.lineTo(d.x,d.y-d.r*0.9);ctx.stroke();
+      const dg=ctx.createRadialGradient(d.x-d.r*0.28,d.y-d.r*0.28,d.r*0.1,d.x,d.y+d.r*0.2,d.r*1.35);
+      dg.addColorStop(0,'rgba(255,255,255,0.99)');dg.addColorStop(0.22,'rgba(188,240,255,0.95)');
+      dg.addColorStop(0.60,'rgba(68,152,252,0.90)');dg.addColorStop(1,'rgba(25,85,210,0)');
+      ctx.fillStyle=dg;ctx.beginPath();ctx.ellipse(d.x,d.y,d.r*0.72,d.r*1.18,0,0,Math.PI*2);ctx.fill();
+      ctx.fillStyle='rgba(255,255,255,0.85)';
+      ctx.beginPath();ctx.ellipse(d.x-d.r*0.22,d.y-d.r*0.30,d.r*0.28,d.r*0.16,Math.PI*0.65,0,Math.PI*2);ctx.fill();
+      ctx.restore();
+    }
+  }
   if(floorWater>0.02){
     const wh=Math.floor(ROOM_H*floorWater*0.68),wy=ROOM_TOP+ROOM_H-wh;
     const wg=ctx.createLinearGradient(0,wy,0,ROOM_TOP+ROOM_H);
