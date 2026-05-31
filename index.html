@@ -638,16 +638,19 @@ function drawTopBar(){
   // Lightning flash (sky area)
   if(lightningFlash>0){ctx.fillStyle=`rgba(220,238,255,${lightningFlash*0.72})`;ctx.fillRect(0,0,W,BAR_H);}
 
-  // ── Weather badge ──
+  // ── Weather badge（晴れ間は非表示） ──
   const bx2=8,by2=Math.floor(BAR_H*0.07),bw2=Math.floor(W*0.30),bh2=Math.floor(BAR_H*0.34);
-  const wC=['#284818','#183860','#481808','#380408'];
-  const wB=['#60b840','#3898e0','#e04818','#e01010'];
-  const flash2=(weatherIdx>=2||rainIntensity>0.80)&&Math.floor(t*3)%2===0;
-  ctx.fillStyle=wC[weatherIdx];ctx.beginPath();ctx.roundRect(bx2,by2,bw2,bh2,6);ctx.fill();
-  ctx.strokeStyle=flash2?wB[weatherIdx]:'rgba(255,255,255,0.18)';ctx.lineWidth=1.5;
-  ctx.beginPath();ctx.roundRect(bx2,by2,bw2,bh2,6);ctx.stroke();
-  ctx.textAlign='center';ctx.fillStyle='#e0f0ff';ctx.font=`bold ${Math.floor(bh2*0.65)}px Arial`;
-  ctx.fillText(W_LABEL[weatherIdx],bx2+bw2/2,by2+bh2*0.76);
+  const isSunnyBadge=(weatherIdx===0&&rainIntensity<0.26);
+  if(!isSunnyBadge){
+    const wC=['#284818','#183860','#481808','#380408'];
+    const wB=['#60b840','#3898e0','#e04818','#e01010'];
+    const flash2=(weatherIdx>=2||rainIntensity>0.80)&&Math.floor(t*3)%2===0;
+    ctx.fillStyle=wC[weatherIdx];ctx.beginPath();ctx.roundRect(bx2,by2,bw2,bh2,6);ctx.fill();
+    ctx.strokeStyle=flash2?wB[weatherIdx]:'rgba(255,255,255,0.18)';ctx.lineWidth=1.5;
+    ctx.beginPath();ctx.roundRect(bx2,by2,bw2,bh2,6);ctx.stroke();
+    ctx.textAlign='center';ctx.fillStyle='#e0f0ff';ctx.font=`bold ${Math.floor(bh2*0.65)}px Arial`;
+    ctx.fillText(W_LABEL[weatherIdx],bx2+bw2/2,by2+bh2*0.76);
+  }
 
   // Intensity status label (梅雨の晴れ間 / 強まる / 激しい雨)
   const iLabel=rainIntensity<0.18?'☀ 晴れ間':rainIntensity<0.46?'':rainIntensity<0.72?'↑ 強まる':'⛈ 激しい';
@@ -1475,24 +1478,25 @@ function drawItemButtons(){
 }
 
 function drawTitle(){
-  // ── 背景画像（coverスタイル） ──
-  if(titleBg.complete&&titleBg.naturalWidth){
+  // ── ①必ずゲーム画面を隠す暗転ベース ──
+  ctx.fillStyle='rgba(0,6,18,0.88)';ctx.fillRect(0,0,W,H);
+
+  // ── ②背景画像（ロード済みなら重ねる） ──
+  if(titleBg.complete&&titleBg.naturalWidth>0){
     const s=Math.max(W/titleBg.naturalWidth,H/titleBg.naturalHeight);
     const dw=titleBg.naturalWidth*s,dh=titleBg.naturalHeight*s;
+    ctx.save();ctx.globalAlpha=0.88;
     ctx.drawImage(titleBg,(W-dw)/2,(H-dh)/2,dw,dh);
-  }else{
-    ctx.fillStyle='#2a4a18';ctx.fillRect(0,0,W,H);
+    ctx.restore();
   }
 
-  // ── 上部グラデーションオーバーレイ（タイトル可読性） ──
-  const tg=ctx.createLinearGradient(0,0,0,H*0.44);
-  tg.addColorStop(0,'rgba(0,8,20,0.82)');tg.addColorStop(1,'rgba(0,8,20,0)');
-  ctx.fillStyle=tg;ctx.fillRect(0,0,W,H*0.44);
-
-  // ── 下部グラデーションオーバーレイ（ボタン可読性） ──
-  const bg2=ctx.createLinearGradient(0,H*0.52,0,H);
-  bg2.addColorStop(0,'rgba(0,8,20,0)');bg2.addColorStop(0.5,'rgba(0,8,20,0.72)');bg2.addColorStop(1,'rgba(0,8,20,0.92)');
-  ctx.fillStyle=bg2;ctx.fillRect(0,H*0.52,W,H*0.48);
+  // ── ③全面グラデーションオーバーレイ（可読性） ──
+  const ov=ctx.createLinearGradient(0,0,0,H);
+  ov.addColorStop(0,'rgba(0,6,24,0.72)');
+  ov.addColorStop(0.35,'rgba(0,6,24,0.08)');
+  ov.addColorStop(0.62,'rgba(0,6,24,0.08)');
+  ov.addColorStop(1,'rgba(0,6,24,0.80)');
+  ctx.fillStyle=ov;ctx.fillRect(0,0,W,H);
 
   // ── タイトルロゴ ──
   ctx.textAlign='center';
