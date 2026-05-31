@@ -260,6 +260,7 @@ function setGameOver(){
   lastScore=score;
   isNewHigh=score>highScore;
   if(isNewHigh){highScore=score;localStorage.setItem('rainDrainHi',highScore);}
+  window.parent.postMessage({type:'gameOver',score:score},'*');
   scene='over';overT=0;playSE('over');
 }
 function startGame(){
