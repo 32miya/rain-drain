@@ -192,7 +192,7 @@ let score=0,timer=0;
 let rotTimer=4,rotAnim=null;
 let weatherIdx=1,weatherTimer=22,warnPlayed=false;
 let lightningT=8,lightningFlash=0;
-let drips=[],exitTimers={};
+let drips=[],exitTimers={},noExitTimer=0;
 let bucket={x:0,water:0,max:100,dumping:false,dumpT:0,shakeT:0};
 let floorWater=0,puddles=[],ripples=[];
 let rainDrops=[],crackPaths=[];
@@ -223,6 +223,12 @@ function initGrid(){
     }
   }
   calcFlow();
+  // 初期配置で出口ゼロなら最初のソース列を縦一直線に強制
+  if(getExits().length===0){
+    const sc=SOURCE_COLS[0];
+    for(let r=0;r<ROWS;r++)grid[gIdx(r,sc)]=makeCell(P_I,0);
+    calcFlow();
+  }
 }
 function genCracks(){
   crackPaths=[];
@@ -241,7 +247,7 @@ function startGame(){
   score=0;timer=0;rotTimer=4;rotAnim=null;
   weatherIdx=0;weatherTimer=W_DURATION[0];warnPlayed=false;
   lightningT=10;lightningFlash=0;
-  drips=[];exitTimers={};
+  drips=[];exitTimers={};noExitTimer=0;
   bucket={x:W/2,water:0,max:110,dumping:false,dumpT:0,shakeT:0};
   floorWater=0;puddles=[];ripples=[];
   rainDrops=[];
@@ -359,13 +365,22 @@ function update(dt){
   }
 
   const exits=getExits();
+  // 出口なし2.5秒でソース列を縦一直線に強制（最大3秒保証）
+  if(exits.length===0){
+    noExitTimer+=dt;
+    if(noExitTimer>2.5&&!rotAnim){
+      const sc=SOURCE_COLS[0];
+      for(let r=0;r<ROWS;r++)grid[gIdx(r,sc)]=makeCell(P_I,0);
+      calcFlow();noExitTimer=0;
+    }
+  }else{noExitTimer=0;}
   const baseRate=W_DRIP[weatherIdx];
-  const iFactor=0.38+rainIntensity*1.24; // 0.38(lull) to 1.62(downpour)
+  const iFactor=0.38+rainIntensity*1.24;
   for(const ec of exits){
     if(exitTimers[ec]===undefined)exitTimers[ec]=0.1+Math.random()*0.2;
     exitTimers[ec]-=dt;
     if(exitTimers[ec]<=0){
-      drips.push({x:GX+ec*CELL+CELL/2+(Math.random()-0.5)*CELL*0.3,y:GRID_TOP+ROWS*CELL,vy:80+Math.random()*80*(1+weatherIdx*0.4),r:2+Math.random()*2,alpha:1});
+      drips.push({x:GX+ec*CELL+CELL/2+(Math.random()-0.5)*CELL*0.3,y:GRID_TOP+ROWS*CELL,vy:90+Math.random()*90*(1+weatherIdx*0.4),r:3.5+Math.random()*2.5});
       exitTimers[ec]=Math.max(0.04,1/(baseRate*iFactor*(0.8+Math.random()*0.4)));
     }
   }
@@ -374,7 +389,6 @@ function update(dt){
   for(let i=drips.length-1;i>=0;i--){
     const d=drips[i];
     d.y+=d.vy*dt;
-    d.alpha=Math.max(0,1-(d.y-GRID_TOP)/((BUCKET_FLOOR_Y-GRID_TOP)*1.2));
     if(d.y>=bucketRimY){
       let caught=false;
       if(!bucket.dumping&&Math.abs(d.x-bucket.x)<bw/2-4){
@@ -653,10 +667,24 @@ function drawCeiling(){
   ctx.fillStyle='rgba(0,0,0,0.14)';ctx.fillRect(GX-2,GRID_TOP-2,COLS*CELL+4,ROWS*CELL+4);
   for(let r=0;r<ROWS;r++)for(let c=0;c<COLS;c++)drawPipeCell(r,c);
   for(const d of drips){
-    ctx.save();ctx.globalAlpha=d.alpha;
-    const dg=ctx.createRadialGradient(d.x,d.y,0,d.x,d.y,d.r);
-    dg.addColorStop(0,'rgba(220,248,255,0.98)');dg.addColorStop(0.5,'rgba(88,162,248,0.8)');dg.addColorStop(1,'rgba(50,120,200,0)');
-    ctx.fillStyle=dg;ctx.beginPath();ctx.ellipse(d.x,d.y,d.r*0.58,d.r*1.1,0,0,Math.PI*2);ctx.fill();ctx.restore();
+    ctx.save();
+    // 尾引きストリーク
+    const tailLen=d.r*4.0+(d.vy||100)*0.010;
+    ctx.strokeStyle='rgba(140,215,255,0.50)';
+    ctx.lineWidth=d.r*0.85;ctx.lineCap='round';
+    ctx.beginPath();ctx.moveTo(d.x,d.y-tailLen);ctx.lineTo(d.x,d.y-d.r*0.9);ctx.stroke();
+    // 本体（涙型）
+    const dg=ctx.createRadialGradient(d.x-d.r*0.28,d.y-d.r*0.28,d.r*0.1,d.x,d.y+d.r*0.2,d.r*1.35);
+    dg.addColorStop(0,'rgba(255,255,255,0.98)');
+    dg.addColorStop(0.22,'rgba(185,238,255,0.94)');
+    dg.addColorStop(0.60,'rgba(65,148,248,0.88)');
+    dg.addColorStop(1,'rgba(25,85,210,0)');
+    ctx.fillStyle=dg;
+    ctx.beginPath();ctx.ellipse(d.x,d.y,d.r*0.72,d.r*1.18,0,0,Math.PI*2);ctx.fill();
+    // ハイライト
+    ctx.fillStyle='rgba(255,255,255,0.82)';
+    ctx.beginPath();ctx.ellipse(d.x-d.r*0.22,d.y-d.r*0.30,d.r*0.28,d.r*0.16,Math.PI*0.65,0,Math.PI*2);ctx.fill();
+    ctx.restore();
   }
   ctx.fillStyle='rgba(0,0,0,0.30)';ctx.fillRect(0,BAR_H+CEIL_H-5,W,5);
 }
