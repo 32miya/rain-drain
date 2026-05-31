@@ -114,7 +114,7 @@ function initAudio(){
   if(AC.state==='suspended')AC.resume();
 }
 function playSE(type,opt){
-  if(!AC)return;
+  if(!AC||!soundEnabled)return;
   // ── 日本TV緊急警報：EEW風5音上昇 + LFOウォーブルサイレン ──────────────
   if(type==='warn'){_playBuf('warn',0.85);return;}
   // ── バケツ・タライ着水音：水位3段階でMP3切り替え ─────────────────────────
@@ -224,6 +224,7 @@ let ceilStains=[],splashParticles=[];
 let screenShakeX=0,screenShakeY=0,screenShakeT=0;
 let rainIntensity=0.30,rainIntensityTarget=0.35,rainLullTimer=3;
 let pendingDrag=null,mopDrag=null,mopHandleX=0,evapParticles=[];
+let soundEnabled=true;
 
 function getBW(){return CELL*2.4;}
 function getBH(){return CELL*1.92;}
@@ -381,14 +382,17 @@ function update(dt){
       setSourcePaths();calcFlow();noExitTimer=0;
     }
   }else{noExitTimer=0;}
+  const isSunny=(weatherIdx===0&&rainIntensity<0.26);
   const baseRate=W_DRIP[weatherIdx];
   const iFactor=0.38+rainIntensity*1.24;
-  for(const ec of exits){
-    if(exitTimers[ec]===undefined)exitTimers[ec]=0.1+Math.random()*0.2;
-    exitTimers[ec]-=dt;
-    if(exitTimers[ec]<=0){
-      drips.push({x:GX+ec*CELL+CELL/2+(Math.random()-0.5)*CELL*0.3,y:GRID_TOP+ROWS*CELL,vy:90+Math.random()*90*(1+weatherIdx*0.4),r:3.5+Math.random()*2.5});
-      exitTimers[ec]=Math.max(0.04,1/(baseRate*iFactor*(0.8+Math.random()*0.4)));
+  if(!isSunny){
+    for(const ec of exits){
+      if(exitTimers[ec]===undefined)exitTimers[ec]=0.1+Math.random()*0.2;
+      exitTimers[ec]-=dt;
+      if(exitTimers[ec]<=0){
+        drips.push({x:GX+ec*CELL+CELL/2+(Math.random()-0.5)*CELL*0.3,y:GRID_TOP+ROWS*CELL,vy:90+Math.random()*90*(1+weatherIdx*0.4),r:3.5+Math.random()*2.5});
+        exitTimers[ec]=Math.max(0.04,1/(baseRate*iFactor*(0.8+Math.random()*0.4)));
+      }
     }
   }
 
@@ -483,6 +487,19 @@ function draw(){
     ctx.font=`${fsz2}px Arial`;
     ctx.fillStyle='rgba(0,0,0,0.38)';ctx.fillText(`${Math.floor(timer)}s`,W-6,BAR_H*0.78+2);
     ctx.fillStyle='#a0c890';ctx.fillText(`${Math.floor(timer)}s`,W-8,BAR_H*0.78);
+  }
+  // ── 音量ON/OFFボタン（右上隅・最前面）──
+  {
+    const sbcx=W-18,sbcy=18,sbr=14;
+    ctx.fillStyle='rgba(0,0,0,0.48)';
+    ctx.beginPath();ctx.arc(sbcx,sbcy,sbr,0,Math.PI*2);ctx.fill();
+    ctx.strokeStyle=soundEnabled?'rgba(160,255,160,0.65)':'rgba(255,120,120,0.65)';
+    ctx.lineWidth=1.5;ctx.beginPath();ctx.arc(sbcx,sbcy,sbr,0,Math.PI*2);ctx.stroke();
+    // スピーカーアイコン（テキスト）
+    ctx.textAlign='center';
+    ctx.font=`${Math.floor(sbr*1.25)}px Arial`;
+    ctx.fillStyle=soundEnabled?'rgba(200,255,200,0.92)':'rgba(255,150,150,0.92)';
+    ctx.fillText(soundEnabled?'🔊':'🔇',sbcx,sbcy+Math.floor(sbr*0.42));
   }
 }
 
@@ -1302,6 +1319,54 @@ function drawDumpBtn(){
   ctx.fillText(bucket.dumping?'捨て中...':(active?'💧 水を捨てる':'バケツが空'),W/2,DUMP_BTN_Y+DUMP_BTN_H*0.70);
 }
 
+function _drawLaundryIcon(type,cx,topY,w,h,alpha){
+  ctx.save();ctx.globalAlpha=alpha;
+  // clothesline with slight sag
+  const ropY=topY+2;const lineHW=w*0.48;
+  ctx.strokeStyle='rgba(180,155,105,0.72)';ctx.lineWidth=1.5;
+  ctx.beginPath();ctx.moveTo(cx-lineHW,ropY);ctx.quadraticCurveTo(cx,ropY+3,cx+lineHW,ropY);ctx.stroke();
+  // clothespins
+  const pins=[cx-w*0.15,cx+w*0.15];
+  pins.forEach(px=>{
+    ctx.fillStyle='rgba(225,195,130,0.9)';ctx.fillRect(px-2.5,ropY-5,5,9);
+    ctx.fillStyle='rgba(175,135,75,0.9)';ctx.fillRect(px-2.5,ropY-1,5,2);
+  });
+  if(type==='bucket'){
+    // Tシャツ
+    const bw=w*0.40;const bh=h*0.66;const bx=cx-bw/2;const by=ropY+2;
+    const sw2=w*0.18;const sh=h*0.32;
+    ctx.fillStyle='rgba(80,160,235,0.88)';
+    // left sleeve
+    ctx.beginPath();ctx.moveTo(bx,by);ctx.lineTo(bx-sw2,by+sh*0.85);ctx.lineTo(bx-sw2*0.35,by+sh*1.1);ctx.lineTo(bx,by+sh*0.65);ctx.closePath();ctx.fill();
+    // right sleeve
+    ctx.beginPath();ctx.moveTo(bx+bw,by);ctx.lineTo(bx+bw+sw2,by+sh*0.85);ctx.lineTo(bx+bw+sw2*0.35,by+sh*1.1);ctx.lineTo(bx+bw,by+sh*0.65);ctx.closePath();ctx.fill();
+    // body
+    ctx.fillRect(bx,by,bw,bh);
+    // collar
+    ctx.fillStyle='rgba(55,135,210,0.88)';
+    ctx.beginPath();ctx.arc(cx,by+2,bw*0.18,Math.PI,0);ctx.fill();
+    // horizontal stripes
+    ctx.strokeStyle='rgba(130,210,255,0.32)';ctx.lineWidth=1;
+    [0.38,0.62].forEach(f=>{ctx.beginPath();ctx.moveTo(bx+2,by+bh*f);ctx.lineTo(bx+bw-2,by+bh*f);ctx.stroke();});
+    ctx.strokeStyle='rgba(60,140,215,0.40)';ctx.lineWidth=1;ctx.strokeRect(bx,by,bw,bh);
+  }else{
+    // タオル
+    const tw=w*0.50;const th=h*0.62;const tx=cx-tw/2;const ty=ropY+2;
+    ctx.fillStyle='rgba(240,205,115,0.88)';ctx.fillRect(tx,ty,tw,th);
+    // horizontal stripes
+    ctx.strokeStyle='rgba(205,130,50,0.52)';ctx.lineWidth=1.8;
+    [0.28,0.52,0.76].forEach(f=>{ctx.beginPath();ctx.moveTo(tx+2,ty+th*f);ctx.lineTo(tx+tw-2,ty+th*f);ctx.stroke();});
+    // center vertical accent
+    ctx.strokeStyle='rgba(205,130,50,0.22)';ctx.lineWidth=1;
+    ctx.beginPath();ctx.moveTo(cx,ty+3);ctx.lineTo(cx,ty+th-3);ctx.stroke();
+    // fringe at bottom
+    ctx.strokeStyle='rgba(220,180,85,0.72)';ctx.lineWidth=1;
+    for(let f=0;f<9;f++){const fx=tx+(tw*(f+0.5))/9;ctx.beginPath();ctx.moveTo(fx,ty+th);ctx.lineTo(fx,ty+th+4);ctx.stroke();}
+    ctx.strokeStyle='rgba(195,155,60,0.42)';ctx.lineWidth=1;ctx.strokeRect(tx,ty,tw,th);
+  }
+  ctx.restore();
+}
+
 function drawItemButtons(){
   const bg=ctx.createLinearGradient(0,BTN_TOP,0,H);
   bg.addColorStop(0,'#181008');bg.addColorStop(1,'#0c0804');
@@ -1333,21 +1398,16 @@ function drawItemButtons(){
         ctx.font=`${Math.floor(BTN_H*0.21)}px Arial`;ctx.fillText(`残${Math.ceil(si.timeLeft)}s`,cx2,cy2+BTN_H*0.24);
       }
     }else if(ready){
-      ctx.globalAlpha=0.88+Math.sin(t*4)*0.12;
-      ctx.fillStyle=color;
-      ctx.beginPath();ctx.moveTo(cx2-iw2/2,cy2+ih2/2);ctx.lineTo(cx2+iw2/2,cy2+ih2/2);ctx.lineTo(cx2+tw3/2,cy2-ih2/2);ctx.lineTo(cx2-tw3/2,cy2-ih2/2);ctx.closePath();ctx.fill();
-      ctx.strokeStyle='rgba(255,255,180,0.65)';ctx.lineWidth=1.2;
-      ctx.beginPath();ctx.moveTo(cx2-iw2/2,cy2+ih2/2);ctx.lineTo(cx2+iw2/2,cy2+ih2/2);ctx.lineTo(cx2+tw3/2,cy2-ih2/2);ctx.lineTo(cx2-tw3/2,cy2-ih2/2);ctx.closePath();ctx.stroke();
-      ctx.globalAlpha=1;
+      const lW=Math.floor(sw*0.68);const lH=Math.floor(BTN_H*0.50);const lTopY=cy2-lH*0.62;
+      _drawLaundryIcon(slot.type,cx2,lTopY,lW,lH,0.88+Math.sin(t*4)*0.12);
       ctx.textAlign='center';ctx.fillStyle='rgba(190,255,170,0.92)';
-      ctx.font=`bold ${Math.floor(BTN_H*0.21)}px Arial`;ctx.fillText(slot.label,cx2,cy2+ih2/2+Math.floor(BTN_H*0.22));
-      ctx.fillStyle='rgba(160,230,140,0.75)';ctx.font=`${Math.floor(BTN_H*0.17)}px Arial`;ctx.fillText('▼ 配備',cx2,cy2-ih2/2-3);
+      ctx.font=`bold ${Math.floor(BTN_H*0.21)}px Arial`;ctx.fillText(slot.label,cx2,lTopY+lH+Math.floor(BTN_H*0.22));
+      ctx.fillStyle='rgba(160,230,140,0.75)';ctx.font=`${Math.floor(BTN_H*0.17)}px Arial`;ctx.fillText('▼ 配備',cx2,lTopY-Math.floor(BTN_H*0.04));
     }else{
       // Cooldown
       const ratio=1-slot.cooldownT/slot.cooldownMax;
-      ctx.fillStyle=color;ctx.globalAlpha=0.25;
-      ctx.beginPath();ctx.moveTo(cx2-iw2/2,cy2+ih2/2);ctx.lineTo(cx2+iw2/2,cy2+ih2/2);ctx.lineTo(cx2+tw3/2,cy2-ih2/2);ctx.lineTo(cx2-tw3/2,cy2-ih2/2);ctx.closePath();ctx.fill();
-      ctx.globalAlpha=1;
+      const lW=Math.floor(sw*0.68);const lH=Math.floor(BTN_H*0.50);const lTopY=cy2-lH*0.62;
+      _drawLaundryIcon(slot.type,cx2,lTopY,lW,lH,0.22);
       const arcR=Math.floor(BTN_H*0.27);
       ctx.strokeStyle='rgba(70,50,20,0.38)';ctx.lineWidth=3;ctx.beginPath();ctx.arc(cx2,cy2,arcR,0,Math.PI*2);ctx.stroke();
       ctx.strokeStyle='rgba(190,155,55,0.78)';ctx.lineWidth=3;
@@ -1446,6 +1506,8 @@ function deploySlot(idx){
 function onDown(e){
   e.preventDefault();initAudio();
   const pos=getPos(e);
+  // 音量ボタン（常に最優先）
+  if(Math.hypot(pos.x-(W-18),pos.y-18)<20){soundEnabled=!soundEnabled;return;}
   if(scene==='title'){startGame();return;}
   if(scene==='over'){scene='title';overT=0;return;}
   if(scene!=='play')return;
