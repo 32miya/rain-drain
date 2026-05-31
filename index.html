@@ -107,9 +107,6 @@ layout();
 window.addEventListener('resize',()=>{layout();});
 if(window.visualViewport){window.visualViewport.addEventListener('resize',()=>{layout();});}
 
-// ═══ TITLE BACKGROUND IMAGE ══════════════════════
-const titleBg=new Image();titleBg.src='title-bg.png';
-
 // ═══ AUDIO ═══════════════════════════════════════
 let AC=null;
 function initAudio(){
@@ -228,6 +225,8 @@ let screenShakeX=0,screenShakeY=0,screenShakeT=0;
 let rainIntensity=0.30,rainIntensityTarget=0.35,rainLullTimer=3;
 let pendingDrag=null,mopDrag=null,mopHandleX=0,evapParticles=[];
 let soundEnabled=true;
+let titleRain=[],titleRainInited=false;
+let _titleStartBtnRect={x:0,y:0,w:0,h:0},_titleHowtoBtnRect={x:0,y:0,w:0,h:0};
 
 function getBW(){return CELL*2.4;}
 function getBH(){return CELL*1.92;}
@@ -292,6 +291,7 @@ function loop(ts){
   if(screenShakeT>0){screenShakeT=Math.max(0,screenShakeT-dt);const si2=screenShakeT*10;screenShakeX=(Math.random()-0.5)*si2;screenShakeY=(Math.random()-0.5)*si2*0.6;}else{screenShakeX=0;screenShakeY=0;}
   if(scene==='play')update(dt);
   if(scene==='over')overT+=dt;
+  if(scene==='title'||scene==='howto')updateTitleRain(dt);
   draw();
 }
 
@@ -469,8 +469,9 @@ function draw(){
   ctx.fillStyle='#080610';ctx.fillRect(0,0,W,H);
   ctx.save();
   if(screenShakeX||screenShakeY)ctx.translate(screenShakeX,screenShakeY);
-  drawTopBar();drawCeiling();drawRoom();drawItemButtons();
+  if(scene==='play'||scene==='over'){drawTopBar();drawCeiling();drawRoom();drawItemButtons();}
   if(scene==='title')drawTitle();
+  if(scene==='howto')drawHowTo();
   if(scene==='over')drawGameOver();
   ctx.restore();
   // Whole-room lightning ambient flash
@@ -1477,103 +1478,237 @@ function drawItemButtons(){
   }
 }
 
-function drawTitle(){
-  // ── ①必ずゲーム画面を隠す暗転ベース ──
-  ctx.fillStyle='rgba(0,6,18,0.88)';ctx.fillRect(0,0,W,H);
+function updateTitleRain(dt){
+  if(!titleRainInited){
+    titleRain=[];
+    const n=Math.floor(W*0.55)+60;
+    for(let i=0;i<n;i++)titleRain.push({
+      x:Math.random()*W,y:Math.random()*H,
+      s:1.0+Math.random()*2.8,l:7+Math.random()*14,
+      a:0.25+Math.random()*0.55,sl:0.12+Math.random()*0.18,
+      spd:320+Math.random()*260
+    });
+    titleRainInited=true;
+  }
+  for(const d of titleRain){
+    d.y+=d.spd*dt;
+    d.x+=d.sl*d.spd*dt;
+    if(d.y>H+20){d.y=-20;d.x=Math.random()*W;}
+  }
+}
 
-  // ── ②背景画像（ロード済みなら重ねる） ──
-  if(titleBg.complete&&titleBg.naturalWidth>0){
-    const s=Math.max(W/titleBg.naturalWidth,H/titleBg.naturalHeight);
-    const dw=titleBg.naturalWidth*s,dh=titleBg.naturalHeight*s;
-    ctx.save();ctx.globalAlpha=0.88;
-    ctx.drawImage(titleBg,(W-dw)/2,(H-dh)/2,dw,dh);
+function _drawTitleBtn(x,y,w,h,label,isPrimary,pulse){
+  ctx.save();
+  if(isPrimary){
+    ctx.shadowColor=`rgba(0,200,255,${pulse*0.65})`;ctx.shadowBlur=20;
+    ctx.strokeStyle=`rgba(100,230,255,${pulse*0.5})`;ctx.lineWidth=5;
+    ctx.beginPath();ctx.roundRect(x-3,y-3,w+6,h+6,h/2+3);ctx.stroke();
+    const bg=ctx.createLinearGradient(x,y,x,y+h);
+    bg.addColorStop(0,`rgba(20,190,255,${0.92+pulse*0.08})`);
+    bg.addColorStop(1,`rgba(0,90,200,${0.92+pulse*0.08})`);
+    ctx.fillStyle=bg;
+    ctx.beginPath();ctx.roundRect(x,y,w,h,h/2);ctx.fill();
+    ctx.fillStyle='rgba(255,255,255,0.18)';
+    ctx.beginPath();ctx.roundRect(x+5,y+4,w-10,h*0.38,h/2-2);ctx.fill();
+    ctx.strokeStyle=`rgba(180,245,255,${0.6+pulse*0.4})`;ctx.lineWidth=2;
+    ctx.beginPath();ctx.roundRect(x,y,w,h,h/2);ctx.stroke();
+    ctx.shadowColor='rgba(0,60,160,0.8)';ctx.shadowBlur=7;
+    ctx.fillStyle='#fff';
+  }else{
+    ctx.strokeStyle=`rgba(100,200,240,${0.45+pulse*0.25})`;ctx.lineWidth=2;
+    ctx.beginPath();ctx.roundRect(x,y,w,h,h/2);ctx.stroke();
+    const bg2=ctx.createLinearGradient(x,y,x,y+h);
+    bg2.addColorStop(0,'rgba(8,30,70,0.85)');
+    bg2.addColorStop(1,'rgba(4,15,45,0.85)');
+    ctx.fillStyle=bg2;
+    ctx.beginPath();ctx.roundRect(x,y,w,h,h/2);ctx.fill();
+    ctx.fillStyle='rgba(255,255,255,0.08)';
+    ctx.beginPath();ctx.roundRect(x+5,y+4,w-10,h*0.38,h/2-2);ctx.fill();
+    ctx.fillStyle=`rgba(160,230,255,${0.7+pulse*0.3})`;
+  }
+  ctx.textAlign='center';
+  ctx.font=`bold ${Math.floor(h*0.48)}px Arial`;
+  ctx.fillText(label,x+w/2,y+h*0.65);
+  ctx.restore();
+}
+
+function drawTitle(){
+  // ── 背景グラデーション ──
+  const bg=ctx.createLinearGradient(0,0,0,H);
+  bg.addColorStop(0,'#010918');
+  bg.addColorStop(0.55,'#030d28');
+  bg.addColorStop(1,'#000a1e');
+  ctx.fillStyle=bg;ctx.fillRect(0,0,W,H);
+
+  // ── 雨粒 ──
+  for(const d of titleRain){
+    ctx.save();
+    ctx.globalAlpha=d.a;
+    ctx.strokeStyle=`rgba(120,200,255,1)`;
+    ctx.lineWidth=d.s*0.6;
+    const dx=d.sl*d.l,dy=d.l;
+    ctx.beginPath();ctx.moveTo(d.x-dx,d.y-dy);ctx.lineTo(d.x,d.y);ctx.stroke();
     ctx.restore();
   }
 
-  // ── ③全面グラデーションオーバーレイ（可読性） ──
-  const ov=ctx.createLinearGradient(0,0,0,H);
-  ov.addColorStop(0,'rgba(0,6,24,0.72)');
-  ov.addColorStop(0.35,'rgba(0,6,24,0.08)');
-  ov.addColorStop(0.62,'rgba(0,6,24,0.08)');
-  ov.addColorStop(1,'rgba(0,6,24,0.80)');
-  ctx.fillStyle=ov;ctx.fillRect(0,0,W,H);
+  // ── 家のシルエット ──
+  const houseW=W*0.68,houseH=H*0.20;
+  const houseX=(W-houseW)/2,houseY=H*0.36;
+  const roofH=houseH*0.50;
+  ctx.save();
+  ctx.fillStyle='rgba(2,10,30,0.92)';
+  ctx.beginPath();
+  // 屋根
+  ctx.moveTo(houseX-houseW*0.04,houseY+roofH);
+  ctx.lineTo(W/2,houseY);
+  ctx.lineTo(houseX+houseW+houseW*0.04,houseY+roofH);
+  ctx.lineTo(houseX+houseW,houseY+roofH);
+  ctx.lineTo(houseX+houseW,houseY+houseH);
+  ctx.lineTo(houseX,houseY+houseH);
+  ctx.lineTo(houseX,houseY+roofH);
+  ctx.closePath();ctx.fill();
+  // 屋根の縁
+  ctx.strokeStyle='rgba(60,130,220,0.55)';ctx.lineWidth=2;
+  ctx.beginPath();
+  ctx.moveTo(houseX-houseW*0.04,houseY+roofH);
+  ctx.lineTo(W/2,houseY);
+  ctx.lineTo(houseX+houseW+houseW*0.04,houseY+roofH);
+  ctx.stroke();
+  // 窓（光）
+  const winW=houseW*0.18,winH=houseH*0.28;
+  const win1X=houseX+houseW*0.18,win2X=houseX+houseW*0.64;
+  const winY=houseY+roofH+houseH*0.22;
+  [win1X,win2X].forEach(wx=>{
+    const wg=ctx.createRadialGradient(wx+winW/2,winY+winH/2,2,wx+winW/2,winY+winH/2,winW*0.9);
+    wg.addColorStop(0,'rgba(255,240,140,0.80)');
+    wg.addColorStop(1,'rgba(200,170,20,0.04)');
+    ctx.fillStyle=wg;ctx.fillRect(wx,winY,winW,winH);
+    ctx.strokeStyle='rgba(200,160,30,0.45)';ctx.lineWidth=1.5;
+    ctx.strokeRect(wx,winY,winW,winH);
+  });
+  // 室内水たまり（床水）
+  const pudY=houseY+houseH-houseH*0.09;
+  const pudG=ctx.createLinearGradient(houseX,pudY,houseX,pudY+houseH*0.09);
+  pudG.addColorStop(0,'rgba(20,100,200,0.60)');
+  pudG.addColorStop(1,'rgba(5,30,100,0.80)');
+  ctx.fillStyle=pudG;
+  ctx.fillRect(houseX,pudY,houseW,houseH*0.09);
+  // 雨漏り（屋根から落ちる水滴）
+  const dripProg=(titleT*0.9)%1;
+  const dripX=W/2+Math.sin(titleT*0.8)*houseW*0.10;
+  const dripY0=houseY+roofH+2;
+  const dripY1=dripY0+(pudY-dripY0)*dripProg;
+  ctx.strokeStyle=`rgba(80,180,255,${0.7*(1-dripProg*0.4)})`;ctx.lineWidth=2.5;
+  ctx.beginPath();ctx.moveTo(dripX,dripY0);ctx.lineTo(dripX,dripY1);ctx.stroke();
+  const dripProg2=(titleT*0.9+0.55)%1;
+  const dripX2=houseX+houseW*0.35+Math.sin(titleT*1.1)*houseW*0.07;
+  const dripY12=dripY0+(pudY-dripY0)*dripProg2;
+  ctx.strokeStyle=`rgba(80,180,255,${0.6*(1-dripProg2*0.4)})`;ctx.lineWidth=2;
+  ctx.beginPath();ctx.moveTo(dripX2,dripY0);ctx.lineTo(dripX2,dripY12);ctx.stroke();
+  ctx.restore();
 
   // ── タイトルロゴ ──
   ctx.textAlign='center';
-  const t1sz=Math.floor(W*0.175);
-  // 「雨漏り」
+  const logoY=H*0.10;
+  const t1sz=Math.floor(W*0.185);
   ctx.save();
-  ctx.shadowColor='rgba(30,160,255,0.9)';ctx.shadowBlur=28;
-  ctx.fillStyle='#e8f8ff';
-  ctx.font=`bold ${t1sz}px Arial`;ctx.fillText('雨漏り',W/2,H*0.14+t1sz);
+  ctx.shadowColor='rgba(30,160,255,1.0)';ctx.shadowBlur=36;
+  ctx.fillStyle='#eef8ff';
+  ctx.font=`bold ${t1sz}px Arial`;ctx.fillText('雨漏り',W/2,logoY+t1sz);
   ctx.restore();
-  // 外枠ストローク
   ctx.save();
-  ctx.strokeStyle='rgba(60,180,255,0.55)';ctx.lineWidth=3;
-  ctx.font=`bold ${t1sz}px Arial`;ctx.strokeText('雨漏り',W/2,H*0.14+t1sz);
+  ctx.strokeStyle='rgba(60,180,255,0.50)';ctx.lineWidth=3;
+  ctx.font=`bold ${t1sz}px Arial`;ctx.strokeText('雨漏り',W/2,logoY+t1sz);
   ctx.restore();
-
-  const t2sz=Math.floor(W*0.118);
-  const t2y=H*0.14+t1sz+t2sz*1.05;
-  // 「パニック！」
+  const t2sz=Math.floor(W*0.120);
+  const t2y=logoY+t1sz+t2sz*1.08;
   ctx.save();
-  ctx.shadowColor='rgba(0,200,255,0.85)';ctx.shadowBlur=24;
-  ctx.fillStyle='#70e0ff';
+  ctx.shadowColor='rgba(0,210,255,0.90)';ctx.shadowBlur=26;
+  ctx.fillStyle='#66deff';
   ctx.font=`bold ${t2sz}px Arial`;ctx.fillText('パニック！',W/2,t2y);
   ctx.restore();
   ctx.save();
-  ctx.strokeStyle='rgba(0,120,200,0.45)';ctx.lineWidth=2.5;
+  ctx.strokeStyle='rgba(0,110,200,0.40)';ctx.lineWidth=2.5;
   ctx.font=`bold ${t2sz}px Arial`;ctx.strokeText('パニック！',W/2,t2y);
   ctx.restore();
 
-  // ── キャッチコピー ──
-  const tagY=t2y+Math.floor(W*0.068);
-  ctx.fillStyle='rgba(220,245,255,0.82)';
-  ctx.font=`${Math.floor(W*0.042)}px Arial`;
-  ctx.fillText('☔ 雨漏りをバケツで受け止めろ！ ☔',W/2,tagY);
+  // ── ボタン ──
+  const pulse=0.70+Math.sin(titleT*3.2)*0.30;
+  const btnW=Math.floor(W*0.76),btnH=Math.floor(H*0.094);
+  const btnX=(W-btnW)/2;
+  const startY=H*0.755;
+  const howtoY=startY+btnH+Math.floor(H*0.022);
 
-  // ── スタートボタン ──
-  const btnW=Math.floor(W*0.76),btnH=Math.floor(H*0.092);
-  const btnX=(W-btnW)/2,btnY=H*0.75;
-  const pulse=0.75+Math.sin(titleT*3.2)*0.25;
+  _drawTitleBtn(btnX,startY,btnW,btnH,'▶  スタート',true,pulse);
+  _drawTitleBtn(btnX,howtoY,btnW,btnH,'?  遊び方',false,pulse*0.7);
 
-  // glow halo
+  _titleStartBtnRect={x:btnX,y:startY,w:btnW,h:btnH};
+  _titleHowtoBtnRect={x:btnX,y:howtoY,w:btnW,h:btnH};
+}
+
+function drawHowTo(){
+  // ── 背景 ──
+  const bg=ctx.createLinearGradient(0,0,0,H);
+  bg.addColorStop(0,'#010918');bg.addColorStop(1,'#000a1e');
+  ctx.fillStyle=bg;ctx.fillRect(0,0,W,H);
+  // 薄い雨
+  for(const d of titleRain){
+    ctx.save();ctx.globalAlpha=d.a*0.35;
+    ctx.strokeStyle='rgba(120,200,255,1)';ctx.lineWidth=d.s*0.5;
+    const dx=d.sl*d.l,dy=d.l;
+    ctx.beginPath();ctx.moveTo(d.x-dx,d.y-dy);ctx.lineTo(d.x,d.y);ctx.stroke();
+    ctx.restore();
+  }
+
+  ctx.textAlign='center';
+  // タイトル
+  const headSz=Math.floor(W*0.078);
   ctx.save();
-  ctx.shadowColor=`rgba(0,200,255,${pulse*0.70})`;ctx.shadowBlur=22;
-  ctx.strokeStyle=`rgba(100,230,255,${pulse*0.55})`;ctx.lineWidth=6;
-  ctx.beginPath();ctx.roundRect(btnX-3,btnY-3,btnW+6,btnH+6,btnH/2+3);ctx.stroke();
+  ctx.shadowColor='rgba(0,200,255,0.8)';ctx.shadowBlur=18;
+  ctx.fillStyle='#b8ecff';
+  ctx.font=`bold ${headSz}px Arial`;ctx.fillText('遊び方',W/2,H*0.11+headSz);
   ctx.restore();
 
-  // body
-  const bgrad=ctx.createLinearGradient(btnX,btnY,btnX,btnY+btnH);
-  bgrad.addColorStop(0,`rgba(20,190,255,${0.90+pulse*0.10})`);
-  bgrad.addColorStop(1,`rgba(0,100,210,${0.90+pulse*0.10})`);
-  ctx.fillStyle=bgrad;
-  ctx.beginPath();ctx.roundRect(btnX,btnY,btnW,btnH,btnH/2);ctx.fill();
+  // 仕切り線
+  ctx.strokeStyle='rgba(60,160,240,0.35)';ctx.lineWidth=1.5;
+  ctx.beginPath();ctx.moveTo(W*0.12,H*0.18);ctx.lineTo(W*0.88,H*0.18);ctx.stroke();
 
-  // inner highlight
-  ctx.fillStyle='rgba(255,255,255,0.20)';
-  ctx.beginPath();ctx.roundRect(btnX+5,btnY+4,btnW-10,btnH*0.40,btnH/2-2);ctx.fill();
-
-  // border
-  ctx.strokeStyle=`rgba(180,245,255,${0.65+pulse*0.35})`;ctx.lineWidth=2;
-  ctx.beginPath();ctx.roundRect(btnX,btnY,btnW,btnH,btnH/2);ctx.stroke();
-
-  // text
-  ctx.save();
-  ctx.shadowColor='rgba(0,80,180,0.8)';ctx.shadowBlur=8;
-  ctx.fillStyle='#ffffff';
-  ctx.font=`bold ${Math.floor(btnH*0.50)}px Arial`;
-  ctx.fillText('▶  タップでスタート',W/2,btnY+btnH*0.65);
-  ctx.restore();
-
-  // ── 操作説明（小文字） ──
-  const infoFsz=Math.floor(W*0.036);
-  ctx.fillStyle='rgba(190,225,255,0.72)';
-  ctx.font=`${infoFsz}px Arial`;
-  ['バケツをドラッグして雨水をキャッチ','満水になったら「水を捨てる」ボタン','床が水浸しになったらゲームオーバー'].forEach((l,i)=>{
-    ctx.fillText(l,W/2,btnY+btnH+infoFsz*1.6*(i+1));
+  // 説明リスト
+  const items=[
+    {icon:'🪣',text:'バケツをドラッグして\n雨水をキャッチしよう'},
+    {icon:'💧',text:'バケツが満水になったら\n「水を捨てる」ボタンを押そう'},
+    {icon:'🌊',text:'床が水浸しになると\nゲームオーバー！'},
+    {icon:'🪤',text:'桶やたらいも活用して\n雨漏りを乗り切ろう'},
+  ];
+  const itemFsz=Math.floor(W*0.042);
+  const iconSz=Math.floor(W*0.065);
+  const rowH=(H*0.58)/items.length;
+  const listTop=H*0.21;
+  ctx.textAlign='left';
+  items.forEach((item,i)=>{
+    const iy=listTop+rowH*i+rowH*0.5;
+    // 番号バッジ
+    ctx.save();
+    ctx.fillStyle='rgba(0,140,220,0.50)';
+    ctx.beginPath();ctx.arc(W*0.11,iy-itemFsz*0.3,iconSz*0.55,0,Math.PI*2);ctx.fill();
+    ctx.fillStyle='#fff';ctx.font=`bold ${iconSz}px Arial`;
+    ctx.textAlign='center';ctx.fillText(item.icon,W*0.11,iy+iconSz*0.32);
+    ctx.restore();
+    // テキスト（改行対応）
+    const lines=item.text.split('\n');
+    ctx.fillStyle='rgba(210,240,255,0.90)';
+    ctx.font=`${itemFsz}px Arial`;ctx.textAlign='left';
+    lines.forEach((ln,li)=>{
+      ctx.fillText(ln,W*0.20,iy+(li-0.2)*itemFsz*1.4);
+    });
   });
+
+  // ── もどるボタン ──
+  const pulse=0.70+Math.sin(titleT*2.8)*0.30;
+  const bW=Math.floor(W*0.60),bH=Math.floor(H*0.088);
+  const bX=(W-bW)/2,bY=H*0.84;
+  _drawTitleBtn(bX,bY,bW,bH,'←  もどる',false,pulse);
+  _titleHowtoBtnRect={x:bX,y:bY,w:bW,h:bH};
 }
 
 function drawGameOver(){
@@ -1652,7 +1787,18 @@ function onDown(e){
   const pos=getPos(e);
   // 音量ボタン（常に最優先）
   if(Math.hypot(pos.x-(W-18),pos.y-18)<20){soundEnabled=!soundEnabled;return;}
-  if(scene==='title'){startGame();return;}
+  if(scene==='title'){
+    const r=_titleHowtoBtnRect;
+    if(pos.x>=r.x&&pos.x<=r.x+r.w&&pos.y>=r.y&&pos.y<=r.y+r.h){scene='howto';return;}
+    const s=_titleStartBtnRect;
+    if(pos.x>=s.x&&pos.x<=s.x+s.w&&pos.y>=s.y&&pos.y<=s.y+s.h){startGame();return;}
+    return;
+  }
+  if(scene==='howto'){
+    const r=_titleHowtoBtnRect;
+    if(pos.x>=r.x&&pos.x<=r.x+r.w&&pos.y>=r.y&&pos.y<=r.y+r.h){scene='title';return;}
+    return;
+  }
   if(scene==='over'){scene='title';overT=0;return;}
   if(scene!=='play')return;
   // Item buttons (bottom)
