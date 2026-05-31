@@ -94,8 +94,8 @@ function layout(){
   ROOM_TOP=BAR_H+CEIL_H;
   BTN_TOP=ROOM_TOP+ROOM_H;
   BUCKET_FLOOR_Y=ROOM_TOP+Math.floor(ROOM_H*0.60);
-  DUMP_BTN_H=Math.floor(ROOM_H*0.22);
-  DUMP_BTN_Y=ROOM_TOP+Math.floor(ROOM_H*0.74);
+  DUMP_BTN_H=Math.floor(ROOM_H*0.18);
+  DUMP_BTN_Y=ROOM_TOP+Math.floor(ROOM_H*0.65);
   SLOT_W=Math.floor(W/SLOT_DEFS.length);
   const scale=Math.min(vw/W,vh/H);
   canvas.style.width=(W*scale)+'px';canvas.style.height=(H*scale)+'px';
@@ -804,7 +804,7 @@ function drawRoom(){
   }
   // 雑巾ハンドル（床水があるとき常時表示）
   if(floorWater>0.02){
-    const hx=mopHandleX,hy=ROOM_TOP+ROOM_H*0.88;
+    const hx=mopHandleX,hy=ROOM_TOP+ROOM_H*0.91;
     const hw=CELL*3.6,hh=Math.max(8,CELL*0.44);
     if(mopDrag){
       // ドラッグ中: 水しぶきの跡 + 動く雑巾
@@ -1277,7 +1277,7 @@ function onDown(e){
   }
   // 雑巾ハンドル（ダンプボタンより先にチェック）
   if(floorWater>0.02){
-    const hy=ROOM_TOP+ROOM_H*0.88,hw=CELL*3.6+20,hh=Math.max(8,CELL*0.44)+24;
+    const hy=ROOM_TOP+ROOM_H*0.91,hw=CELL*3.6+20,hh=Math.max(8,CELL*0.44)+24;
     if(Math.abs(pos.x-mopHandleX)<hw/2&&Math.abs(pos.y-hy)<hh/2){
       mopDrag={reduced:0};return;
     }
