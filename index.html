@@ -82,12 +82,15 @@ function layout(){
   const app=document.getElementById('app');
   const vw=app.clientWidth||window.innerWidth;
   const vh=app.clientHeight||window.innerHeight;
-  W=Math.min(vw,Math.floor(vh/1.08),480);
+  W=Math.min(vw,480);
   CELL=Math.floor((W-8)/COLS);W=CELL*COLS+8;GX=4;
-  BAR_H=Math.floor(W*0.23);
   CEIL_H=Math.floor(CELL*0.28)+ROWS*CELL+Math.floor(CELL*0.22);
-  ROOM_H=Math.floor(W*0.38);
-  BTN_H=Math.floor(W*0.14);
+  BTN_H=Math.max(52,Math.floor(vh*0.10));
+  // BAR_H・ROOM_H をビューポート残り高さで計算してスクリーンを埋める
+  const capVh=Math.min(vh,W*2.2);  // 横長デスクトップで極端に縦長になるのを防止
+  const remaining=capVh-CEIL_H-BTN_H;
+  BAR_H=Math.floor(remaining*0.42);   // 上部雨エリア 42%
+  ROOM_H=remaining-BAR_H;             // 下部部屋エリア 58%
   H=BAR_H+CEIL_H+ROOM_H+BTN_H;
   canvas.width=W;canvas.height=H;
   GRID_TOP=BAR_H+Math.floor(CELL*0.28);
@@ -216,14 +219,14 @@ function initGrid(){
   const T=[P_I,P_L,P_L,P_T];
   for(let r=0;r<ROWS;r++)for(let c=0;c<COLS;c++)
     grid.push(makeCell(T[Math.floor(Math.random()*T.length)],Math.floor(Math.random()*4)));
+  // ソース列: 縦(I字)→十字→T字 の固定配置でロック（自動回転対象外）
   for(const sc of SOURCE_COLS){
-    for(let r=0;r<ROWS;r++){
-      if(Math.random()<0.5)grid[gIdx(r,sc)]=makeCell(P_I,0);
-      else grid[gIdx(r,sc)]=makeCell(P_T,Math.random()<0.5?1:3);
-    }
+    grid[gIdx(0,sc)]=makeCell(P_I,0);   // row0: 縦直線 N+S
+    grid[gIdx(1,sc)]=makeCell(P_X,0);   // row1: 十字 全方向
+    grid[gIdx(2,sc)]=makeCell(P_T,1);   // row2: T字 N+S+W → 出口あり
   }
   calcFlow();
-  // 初期配置で出口ゼロなら最初のソース列を縦一直線に強制
+  // 念のため出口ゼロチェック（通常は発生しない）
   if(getExits().length===0){
     const sc=SOURCE_COLS[0];
     for(let r=0;r<ROWS;r++)grid[gIdx(r,sc)]=makeCell(P_I,0);
@@ -352,7 +355,7 @@ function update(dt){
     let tries=20;
     while(tries-->0){
       const r=Math.floor(Math.random()*ROWS),c=Math.floor(Math.random()*COLS);
-      if(SOURCE_COLS.includes(c)&&r===0)continue;
+      if(SOURCE_COLS.includes(c))continue; // ソース列全行をロック
       const cell=gCell(r,c);
       const newRot=(cell.rot+1+Math.floor(Math.random()*2))%4;
       if(newRot===cell.rot)continue;
@@ -701,7 +704,7 @@ function drawPipeCell(r,c){
     rotOffset=(rotAnim.toRot-rotAnim.fromRot)*ease*Math.PI/2;dispRot=rotAnim.fromRot;
   }
   const conn=PCONN[gCell(r,c).type][dispRot];
-  const hasW=gCell(r,c).hasWater,isSrc=SOURCE_COLS.includes(c)&&r===0;
+  const hasW=gCell(r,c).hasWater,isSrc=SOURCE_COLS.includes(c);
   const rim=hasW?'#b0e0ff':isSrc?'#ffe8a0':'#cc9c48';
   const hi =hasW?'#58b8e8':isSrc?'#c89030':'#9c6828';
   const base=hasW?'#1870c0':isSrc?'#806018':'#624018';
