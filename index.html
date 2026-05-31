@@ -155,7 +155,7 @@ function playSE(type,opt){
 // ═══ PIPE GRID ═══════════════════════════════════
 let grid=[];
 let SOURCE_COLS=[2,5,9];
-function makeCell(type,rot){return{type,rot,hasWater:false};}
+function makeCell(type,rot,locked){return{type,rot,hasWater:false,locked:!!locked};}
 function gIdx(r,c){return r*COLS+c;}
 function gCell(r,c){return grid[gIdx(r,c)];}
 function canConn(r1,c1,d){
@@ -175,6 +175,23 @@ function calcFlow(){
   }
   for(const sc of SOURCE_COLS){
     if(sc>=0&&sc<COLS&&PCONN[gCell(0,sc).type][gCell(0,sc).rot][DIR_N])dfs(0,sc);
+  }
+}
+// ソース列をL字パスで固定（偶数列→右曲がり, 奇数列→左曲がり）
+function setSourcePaths(){
+  for(const sc of SOURCE_COLS){
+    const goRight=(sc%2===0);
+    const sc2=goRight?sc+1:sc-1;
+    if(sc2<0||sc2>=COLS)continue;
+    grid[gIdx(0,sc)]=makeCell(P_I,0,true);         // row0: 縦直線(N+S)
+    if(goRight){
+      grid[gIdx(1,sc)] =makeCell(P_L,0,true);      // row1 sc : N+E → 右L字
+      grid[gIdx(1,sc2)]=makeCell(P_L,2,true);      // row1 sc+1: S+W
+    }else{
+      grid[gIdx(1,sc)] =makeCell(P_L,3,true);      // row1 sc : N+W → 左L字
+      grid[gIdx(1,sc2)]=makeCell(P_L,1,true);      // row1 sc-1: E+S
+    }
+    grid[gIdx(2,sc2)]=makeCell(P_T,1,true);        // row2 sc2: N+S+W → 出口
   }
 }
 function getExits(){
@@ -219,19 +236,8 @@ function initGrid(){
   const T=[P_I,P_L,P_L,P_T];
   for(let r=0;r<ROWS;r++)for(let c=0;c<COLS;c++)
     grid.push(makeCell(T[Math.floor(Math.random()*T.length)],Math.floor(Math.random()*4)));
-  // ソース列: 縦(I字)→十字→T字 の固定配置でロック（自動回転対象外）
-  for(const sc of SOURCE_COLS){
-    grid[gIdx(0,sc)]=makeCell(P_I,0);   // row0: 縦直線 N+S
-    grid[gIdx(1,sc)]=makeCell(P_X,0);   // row1: 十字 全方向
-    grid[gIdx(2,sc)]=makeCell(P_T,1);   // row2: T字 N+S+W → 出口あり
-  }
+  setSourcePaths();
   calcFlow();
-  // 念のため出口ゼロチェック（通常は発生しない）
-  if(getExits().length===0){
-    const sc=SOURCE_COLS[0];
-    for(let r=0;r<ROWS;r++)grid[gIdx(r,sc)]=makeCell(P_I,0);
-    calcFlow();
-  }
 }
 function genCracks(){
   crackPaths=[];
@@ -265,12 +271,12 @@ function startGame(){
 }
 
 function addSplash(x,y,isBucket){
-  const n=isBucket?5:9,spd=isBucket?11:22;
+  const n=isBucket?10:14,spd=isBucket?18:28;
   for(let i=0;i<n;i++){
     const spread=(Math.random()-0.5)*2;
     const v=spd*(0.65+Math.random()*0.8);
-    splashParticles.push({x,y,vx:spread*v*0.75,vy:-(v*(0.55+Math.random()*0.6)),
-      r:(isBucket?1.2:2.2)+Math.random()*1.8,alpha:0.88,isBucket});
+    splashParticles.push({x,y,vx:spread*v*0.80,vy:-(v*(0.55+Math.random()*0.7)),
+      r:(isBucket?1.8:2.8)+Math.random()*2.2,alpha:0.95,isBucket});
   }
 }
 
@@ -310,7 +316,7 @@ function update(dt){
       if(weatherIdx===2)SOURCE_COLS=[...new Set([...SOURCE_COLS,2,7])];    // 2→4列
       if(weatherIdx===3)SOURCE_COLS=[...new Set([...SOURCE_COLS,0,11])];   // 4→6列
       SOURCE_COLS=SOURCE_COLS.filter(c=>c>=0&&c<COLS);
-      genCracks();calcFlow();
+      genCracks();setSourcePaths();calcFlow();
     }
   }
 
@@ -355,7 +361,7 @@ function update(dt){
     let tries=20;
     while(tries-->0){
       const r=Math.floor(Math.random()*ROWS),c=Math.floor(Math.random()*COLS);
-      if(SOURCE_COLS.includes(c))continue; // ソース列全行をロック
+      if(gCell(r,c).locked)continue; // lockedセルはロック
       const cell=gCell(r,c);
       const newRot=(cell.rot+1+Math.floor(Math.random()*2))%4;
       if(newRot===cell.rot)continue;
@@ -372,9 +378,7 @@ function update(dt){
   if(exits.length===0){
     noExitTimer+=dt;
     if(noExitTimer>2.5&&!rotAnim){
-      const sc=SOURCE_COLS[0];
-      for(let r=0;r<ROWS;r++)grid[gIdx(r,sc)]=makeCell(P_I,0);
-      calcFlow();noExitTimer=0;
+      setSourcePaths();calcFlow();noExitTimer=0;
     }
   }else{noExitTimer=0;}
   const baseRate=W_DRIP[weatherIdx];
@@ -660,15 +664,34 @@ function drawCeiling(){
     ctx.beginPath();ctx.moveTo(cr.cx+cr.pts[0].x,cr.cy+cr.pts[0].y);
     for(let i=1;i<cr.pts.length;i++)ctx.lineTo(cr.cx+cr.pts[i].x,cr.cy+cr.pts[i].y);ctx.stroke();
   }
-  for(const ec of getExits()){
-    const dx=GX+ec*CELL+CELL/2,dy=GRID_TOP+ROWS*CELL;
-    const hang=1.5+Math.sin(t*4.2+ec*0.8)*1.2;
-    const wg=ctx.createRadialGradient(dx,dy+hang*0.5,0,dx,dy+hang,4);
-    wg.addColorStop(0,'rgba(210,245,255,0.95)');wg.addColorStop(0.6,'rgba(85,155,245,0.7)');wg.addColorStop(1,'rgba(50,110,200,0)');
-    ctx.fillStyle=wg;ctx.beginPath();ctx.arc(dx,dy+hang,2.8,0,Math.PI*2);ctx.fill();
-  }
   ctx.fillStyle='rgba(0,0,0,0.14)';ctx.fillRect(GX-2,GRID_TOP-2,COLS*CELL+4,ROWS*CELL+4);
   for(let r=0;r<ROWS;r++)for(let c=0;c<COLS;c++)drawPipeCell(r,c);
+  // パイプ出口: 大型水滴 + 落下ドリップとの水柱ライン
+  const curExits=getExits();
+  for(const ec of curExits){
+    const dx=GX+ec*CELL+CELL/2,dy=GRID_TOP+ROWS*CELL;
+    // 落下中ドリップがこの出口に紐づく場合、水柱ラインを描画
+    for(const d of drips){
+      if(Math.abs(d.x-dx)<CELL*0.6){
+        const lg=ctx.createLinearGradient(dx,dy,dx,d.y);
+        lg.addColorStop(0,'rgba(100,190,255,0.30)');
+        lg.addColorStop(1,'rgba(60,140,240,0.04)');
+        ctx.fillStyle=lg;ctx.fillRect(dx-2.5,dy,5,d.y-dy);
+      }
+    }
+    // 出口の垂れ下がり大型水滴（テアドロップ型）
+    const hang=3+Math.sin(t*4.2+ec*0.8)*2;
+    const rr=3.5+Math.sin(t*3.8+ec*1.2)*1.0;
+    const wg=ctx.createRadialGradient(dx-rr*0.3,dy+hang-rr*0.3,rr*0.1,dx,dy+hang,rr*1.5);
+    wg.addColorStop(0,'rgba(255,255,255,0.95)');
+    wg.addColorStop(0.3,'rgba(160,225,255,0.88)');
+    wg.addColorStop(0.7,'rgba(65,148,248,0.75)');
+    wg.addColorStop(1,'rgba(30,90,210,0)');
+    ctx.fillStyle=wg;ctx.beginPath();ctx.ellipse(dx,dy+hang,rr*0.75,rr,0,0,Math.PI*2);ctx.fill();
+    // ハイライト
+    ctx.fillStyle='rgba(255,255,255,0.70)';
+    ctx.beginPath();ctx.ellipse(dx-rr*0.25,dy+hang-rr*0.3,rr*0.28,rr*0.18,Math.PI*0.6,0,Math.PI*2);ctx.fill();
+  }
   for(const d of drips){
     ctx.save();
     // 尾引きストリーク
@@ -704,7 +727,7 @@ function drawPipeCell(r,c){
     rotOffset=(rotAnim.toRot-rotAnim.fromRot)*ease*Math.PI/2;dispRot=rotAnim.fromRot;
   }
   const conn=PCONN[gCell(r,c).type][dispRot];
-  const hasW=gCell(r,c).hasWater,isSrc=SOURCE_COLS.includes(c);
+  const hasW=gCell(r,c).hasWater,isSrc=gCell(r,c).locked;
   const rim=hasW?'#b0e0ff':isSrc?'#ffe8a0':'#cc9c48';
   const hi =hasW?'#58b8e8':isSrc?'#c89030':'#9c6828';
   const base=hasW?'#1870c0':isSrc?'#806018':'#624018';
