@@ -60,13 +60,13 @@ const PCONN={
 };
 const W_LABEL=['小雨','中雨','大雨','暴風雨'];
 const W_SKY=['#20304a','#142038','#0c1430','#060c20'];
-const W_DRIP=[0.40,0.75,1.6,3.2];
-const W_ROT_INTERVAL=[7.0,5.0,3.2,1.6];
-const W_DURATION=[65,55,45,0];
+const W_DRIP=[0.55,0.75,1.4,2.2];
+const W_ROT_INTERVAL=[8.0,5.5,3.5,2.0];
+const W_DURATION=[32,55,45,0];
 
 const SLOT_DEFS=[
-  {type:'bucket',label:'バケツ',cooldownMax:12,max:100,color:'#7a9850',dur:32},
-  {type:'tub',   label:'タライ',cooldownMax:18,max:150,color:'#c0a820',dur:28},
+  {type:'bucket',label:'バケツ',cooldownMax:20,max:110,color:'#7a9850',dur:32},
+  {type:'tub',   label:'タライ',cooldownMax:20,max:165,color:'#c0a820',dur:28},
 ];
 
 // ═══ LAYOUT ══════════════════════════════════════
@@ -229,6 +229,9 @@ let titleRain=[],titleRainInited=false;
 let _titleStartBtnRect={x:0,y:0,w:0,h:0},_titleHowtoBtnRect={x:0,y:0,w:0,h:0};
 let highScore=parseInt(sessionStorage.getItem('rainDrainHi')||'0');
 let lastScore=0,isNewHigh=false;
+let weatherTransitionT=0;
+let heavyRainAccum=0,forcedCalmTimer=0,calmScaleAccum=0;
+let snail=null;
 
 function getBW(){return CELL*2.4;}
 function getBH(){return CELL*1.92;}
@@ -269,7 +272,7 @@ function startGame(){
   weatherIdx=0;weatherTimer=W_DURATION[0];warnPlayed=false;
   lightningT=10;lightningFlash=0;
   drips=[];exitTimers={};noExitTimer=0;
-  bucket={x:W/2,water:0,max:110,dumping:false,dumpT:0,shakeT:0};
+  bucket={x:W/2,water:0,max:120,dumping:false,dumpT:0,shakeT:0};
   floorWater=0;puddles=[];ripples=[];
   rainDrops=[];
   const n=90+Math.floor(W*0.55);
@@ -277,8 +280,10 @@ function startGame(){
   spawnedItems=[];resetSlots();
   ceilStains=[];splashParticles=[];
   screenShakeX=0;screenShakeY=0;screenShakeT=0;
-  rainIntensity=0.15;rainIntensityTarget=0.22;rainLullTimer=5;
+  rainIntensity=0.22;rainIntensityTarget=0.34;rainLullTimer=3;
+  weatherTransitionT=0;heavyRainAccum=0;forcedCalmTimer=0;calmScaleAccum=0;
   pendingDrag=null;mopDrag=null;mopHandleX=W/2;evapParticles=[];
+  initSnail();
   scene='play';
 }
 
@@ -306,16 +311,45 @@ function loop(ts){
 
 function update(dt){
   timer+=dt;
+  updateSnail(dt);
   score=Math.floor(timer*12*(1+weatherIdx*0.6));
 
   // ── 梅雨の強弱 (rain intensity fluctuation) ──
   rainLullTimer-=dt;
-  if(rainLullTimer<=0){
-    const lo=[0.04,0.10,0.25,0.45][weatherIdx],hi=[0.38,0.68,0.94,1.00][weatherIdx];
-    const isLull=weatherIdx>=1&&Math.random()<0.28; // 28% chance of brief calm
-    rainIntensityTarget=isLull?lo*(0.3+Math.random()*0.5):lo+Math.random()*(hi-lo);
-    rainLullTimer=(isLull?5:2.5)+Math.random()*8;
+  if(forcedCalmTimer>0){
+    // 強制静穏：激しい雨の後の回復期間
+    forcedCalmTimer-=dt;
+    if(rainLullTimer<=0){
+      rainIntensityTarget=0.05+Math.random()*0.09;
+      rainLullTimer=1.5+Math.random()*2.0;
+    }
+  }else{
+    if(rainLullTimer<=0){
+      // フェーズ遷移直後は旧フェーズとのブレンドで緩やかに上げる
+      const tr=weatherTransitionT>0?Math.min(1,weatherTransitionT/5):0;
+      const loArr=[0.16,0.18,0.28,0.48],hiArr=[0.38,0.68,0.94,1.00];
+      const prevIdx=Math.max(0,weatherIdx-1);
+      const lo=loArr[weatherIdx]*(1-tr)+loArr[prevIdx]*tr;
+      const hi=hiArr[weatherIdx]*(1-tr)+hiArr[prevIdx]*tr;
+      const isLull=weatherIdx>=1&&Math.random()<0.28;
+      rainIntensityTarget=isLull?lo*(0.3+Math.random()*0.5):lo+Math.random()*(hi-lo);
+      rainLullTimer=(isLull?5:2.5)+Math.random()*8;
+    }
+    // 高強度降雨の累積トラッキング
+    if(weatherIdx>=2&&rainIntensity>0.70){
+      heavyRainAccum+=dt;
+    }else{
+      heavyRainAccum=Math.max(0,heavyRainAccum-dt*0.25);
+    }
+    // 累積閾値を超えたら強制静穏を起動（回数に比例して長くなる）
+    if(heavyRainAccum>9){
+      calmScaleAccum+=0.4;
+      forcedCalmTimer=5+calmScaleAccum*2.0;
+      heavyRainAccum=0;
+      rainLullTimer=0;
+    }
   }
+  if(weatherTransitionT>0)weatherTransitionT=Math.max(0,weatherTransitionT-dt);
   // Intensity smoothly follows target (rises fast, fades slowly)
   const iSpd=rainIntensityTarget>rainIntensity?0.50:0.20;
   rainIntensity+=(rainIntensityTarget-rainIntensity)*Math.min(1,iSpd*dt);
@@ -325,6 +359,7 @@ function update(dt){
     if(weatherTimer<5&&!warnPlayed){warnPlayed=true;playSE('warn');}
     if(weatherTimer<=0){
       weatherIdx++;weatherTimer=weatherIdx<3?W_DURATION[weatherIdx]:9999;warnPlayed=false;
+      weatherTransitionT=5; // フェーズ遷移後5秒かけて難易度を緩やかに上げる
       if(weatherIdx===1)SOURCE_COLS=[...new Set([...SOURCE_COLS,9])];        // 1→2列
       if(weatherIdx===2)SOURCE_COLS=[...new Set([...SOURCE_COLS,2,7])];    // 2→4列
       if(weatherIdx===3)SOURCE_COLS=[...new Set([...SOURCE_COLS,0,11])];   // 4→6列
@@ -398,7 +433,9 @@ function update(dt){
   const baseRate=W_DRIP[weatherIdx];
   const iFactor=0.38+rainIntensity*1.24;
   if(!isSunny){
+    const snailBlockedCol=snail&&snail.blocking?snail.c:-1;
     for(const ec of exits){
+      if(ec===snailBlockedCol)continue; // カタツムリがパイプを詰まらせている
       if(exitTimers[ec]===undefined)exitTimers[ec]=0.1+Math.random()*0.2;
       exitTimers[ec]-=dt;
       if(exitTimers[ec]<=0){
@@ -415,7 +452,7 @@ function update(dt){
     if(d.y>=bucketRimY){
       let caught=false;
       if(!bucket.dumping&&Math.abs(d.x-bucket.x)<bw/2-4){
-        bucket.water=Math.min(bucket.max,bucket.water+d.r*(0.7+weatherIdx*0.18));
+        bucket.water=Math.min(bucket.max,bucket.water+d.r*(0.7+weatherIdx*0.10));
         bucket.shakeT=0.15;
         addSplash(d.x,bucketRimY,true);
         if(bucket.water>=bucket.max){setGameOver();return;}
@@ -425,7 +462,7 @@ function update(dt){
       if(!caught){
         for(const si of spawnedItems){
           if(Math.abs(d.x-si.x)<getItemW(si.type)/2-4){
-            si.water=Math.min(si.max,si.water+d.r*(0.7+weatherIdx*0.18));
+            si.water=Math.min(si.max,si.water+d.r*(0.7+weatherIdx*0.10));
             addSplash(d.x,si.y-getItemH(si.type)*0.92,true);
             if(si.water>=si.max){floorWater=Math.min(1,floorWater+0.04);si.timeLeft=0;}
             playSE(si.type==='tub'?'drip_tub':'drip_bucket',si.water/si.max);
@@ -434,7 +471,7 @@ function update(dt){
         }
       }
       if(!caught){
-        floorWater=Math.min(1,floorWater+0.009*(1+weatherIdx*0.75));
+        floorWater=Math.min(1,floorWater+0.009*(1+weatherIdx*0.45));
         ripples.push({x:d.x,y:BUCKET_FLOOR_Y+6,r:0,alpha:0.6});
         puddles.push({x:d.x,r:3+Math.random()*4,t:0});
         addSplash(d.x,BUCKET_FLOOR_Y,false);
@@ -471,6 +508,140 @@ function update(dt){
     const p=evapParticles[i];p.x+=p.vx*dt;p.y+=p.vy*dt;p.alpha-=dt*0.52;
     if(p.alpha<=0)evapParticles.splice(i,1);
   }
+}
+
+// ═══ SNAIL ═══════════════════════════════════════
+function initSnail(){
+  const c=Math.floor(COLS/2);
+  snail={r:0,c,x:GX+c*CELL+CELL/2,y:GRID_TOP+CELL*0.52,
+    fromX:0,fromY:0,toX:0,toY:0,
+    moveT:1.0,waitT:2.5+Math.random()*1.5,
+    dir:1,legT:0,blocking:false,
+    burstCols:[],burstCount:0,burstTimer:0};
+}
+
+function moveSnailToNext(){
+  if(!snail)return;
+  if(snail.blocking){
+    const ce=getExits();
+    snail.burstCols=ce.filter(ec=>ec===snail.c);
+    if(!snail.burstCols.length&&ce.length)snail.burstCols=[ce[0]];
+    snail.burstCount=4+Math.floor(Math.random()*3);
+    snail.burstTimer=0;
+  }
+  // 隣接セルをランダムに選ぶ（等確率）
+  const opts=[];
+  for(const [dr,dc] of [[0,1],[0,-1],[1,0],[-1,0]]){
+    const nr=snail.r+dr,nc=snail.c+dc;
+    if(nr>=0&&nr<ROWS&&nc>=0&&nc<COLS)opts.push({r:nr,c:nc,dc,w:1});
+  }
+  if(!opts.length)return;
+  let rnd=Math.random()*opts.reduce((s,o)=>s+o.w,0);
+  let ch=opts[0];
+  for(const o of opts){rnd-=o.w;if(rnd<=0){ch=o;break;}}
+  snail.fromX=snail.x;snail.fromY=snail.y;
+  snail.toX=GX+ch.c*CELL+CELL/2;snail.toY=GRID_TOP+ch.r*CELL+CELL*0.52;
+  snail.r=ch.r;snail.c=ch.c;snail.moveT=0;
+  if(ch.dc>0)snail.dir=1;else if(ch.dc<0)snail.dir=-1;
+}
+
+function updateSnail(dt){
+  if(!snail)return;
+  snail.legT+=dt;
+  // 解放後のバースト雫
+  if(snail.burstCount>0){
+    snail.burstTimer-=dt;
+    if(snail.burstTimer<=0){
+      for(const bc of snail.burstCols)
+        drips.push({x:GX+bc*CELL+CELL/2+(Math.random()-0.5)*CELL*0.25,
+          y:GRID_TOP+ROWS*CELL,
+          vy:175+Math.random()*90*(1+weatherIdx*0.4),r:5.5+Math.random()*2.5});
+      snail.burstCount--;snail.burstTimer=0.07;
+    }
+  }
+  if(snail.moveT<1.0){
+    snail.moveT=Math.min(1.0,snail.moveT+dt/0.38);
+    const e=snail.moveT<0.5?2*snail.moveT*snail.moveT:1-Math.pow(-2*snail.moveT+2,2)/2;
+    snail.x=snail.fromX+(snail.toX-snail.fromX)*e;
+    snail.y=snail.fromY+(snail.toY-snail.fromY)*e;
+    if(snail.moveT>=1.0){snail.y=snail.toY;snail.waitT=1.8+Math.random()*1.8;}
+  }else{
+    const cell=gCell(snail.r,snail.c);
+    snail.blocking=!!(cell&&cell.hasWater);
+    snail.waitT-=dt;
+    if(snail.waitT<=0)moveSnailToNext();
+  }
+}
+
+function drawSnailSprite(){
+  const sx=snail.x,sy=snail.y,s=CELL*0.55,fr=snail.dir>0,lt=snail.legT;
+  // ── 伸び縮みパラメータ ──
+  const mt=snail.moveT,isMoving=mt<1.0;
+  const stretch=isMoving?Math.sin(mt*Math.PI)*0.44:0;
+  const movX=snail.toX-snail.fromX,movY=snail.toY-snail.fromY;
+  const isHoriz=!isMoving||Math.abs(movX)>=Math.abs(movY);
+  // 胴体スケール: 移動方向に伸び、垂直方向に縮む
+  const bScX=isHoriz?1+stretch:1-stretch*0.40;
+  const bScY=isHoriz?1-stretch*0.40:1+stretch;
+  // 殻が胴体より遅れる量
+  const shLagX=isHoriz?-stretch*s*0.30:0;
+  const shLagY=isHoriz?0:-Math.sign(movY||1)*stretch*s*0.28;
+
+  ctx.save();
+  ctx.translate(sx,sy);if(!fr)ctx.scale(-1,1);
+  // 影（移動時は方向に伸びる）
+  ctx.globalAlpha=0.18;ctx.fillStyle='#000';
+  ctx.beginPath();ctx.ellipse(0,s*0.40,s*0.58*bScX,s*0.12,0,0,Math.PI*2);ctx.fill();
+  ctx.globalAlpha=1;
+  // ブロック中はゴールドの輪
+  if(snail.blocking){
+    const pulse=0.45+Math.sin(lt*4.5)*0.35;
+    ctx.strokeStyle=`rgba(255,205,60,${pulse})`;ctx.lineWidth=2.5;
+    ctx.beginPath();ctx.arc(0,0,s*0.74,0,Math.PI*2);ctx.stroke();
+  }
+  // 胴体（伸び縮みする楕円）
+  const bg=ctx.createLinearGradient(-s*0.55,-s*0.12,-s*0.55,s*0.32);
+  bg.addColorStop(0,'#f6f2e4');bg.addColorStop(1,'#ddd0a0');
+  ctx.fillStyle=bg;
+  ctx.beginPath();ctx.ellipse(0,s*0.10,s*0.60*bScX,s*0.28*bScY,0,0,Math.PI*2);ctx.fill();
+  ctx.strokeStyle='rgba(165,140,80,0.48)';ctx.lineWidth=0.8;ctx.stroke();
+  // 腹足（移動中のみ下縁に波紋）
+  if(isMoving){
+    const wv=Math.sin(lt*11)*s*0.08;
+    ctx.fillStyle='rgba(210,185,110,0.35)';
+    ctx.beginPath();ctx.ellipse(wv,s*0.31,s*0.38*bScX,s*0.09,0,0,Math.PI*2);ctx.fill();
+  }
+  // 殻（胴体より遅れて追従）
+  const shX=s*0.12+shLagX,shY=-s*0.24+shLagY,shR=s*0.46;
+  const shG=ctx.createRadialGradient(shX-shR*0.30,shY-shR*0.30,shR*0.08,shX,shY,shR);
+  shG.addColorStop(0,'#cdd8a5');shG.addColorStop(0.45,'#94a86a');shG.addColorStop(1,'#5f7040');
+  ctx.fillStyle=shG;ctx.beginPath();ctx.arc(shX,shY,shR,0,Math.PI*2);ctx.fill();
+  ctx.strokeStyle='rgba(42,52,16,0.32)';ctx.lineWidth=0.8;ctx.stroke();
+  ctx.fillStyle='rgba(255,255,220,0.22)';
+  ctx.beginPath();ctx.ellipse(shX-shR*0.25,shY-shR*0.28,shR*0.28,shR*0.16,-0.45,0,Math.PI*2);ctx.fill();
+  // 殻スパイラル
+  ctx.strokeStyle='rgba(36,48,14,0.56)';ctx.lineWidth=1.0;ctx.beginPath();
+  for(let a=0;a<=Math.PI*4.6;a+=0.12){
+    const ar=shR*0.07+a/(Math.PI*4.6)*shR*0.36;
+    a===0?ctx.moveTo(shX+ar,shY):ctx.lineTo(shX+ar*Math.cos(a),shY+ar*Math.sin(a)*0.76);
+  }
+  ctx.stroke();
+  // 触角 + 目（顔は常に前端）
+  const fX=-s*0.44*bScX,ew=Math.sin(lt*2.8)*0.04;
+  ctx.strokeStyle='#ccc09a';ctx.lineWidth=s*0.09;ctx.lineCap='round';
+  ctx.beginPath();ctx.moveTo(fX+s*0.10,-s*0.12);
+  ctx.quadraticCurveTo(fX+s*0.08,-s*0.30,fX+s*0.07+ew*s,-s*0.42);ctx.stroke();
+  ctx.fillStyle='#fff';ctx.beginPath();ctx.arc(fX+s*0.07+ew*s,-s*0.42,s*0.090,0,Math.PI*2);ctx.fill();
+  ctx.fillStyle='#111';ctx.beginPath();ctx.arc(fX+s*0.10+ew*s,-s*0.44,s*0.055,0,Math.PI*2);ctx.fill();
+  ctx.strokeStyle='#ccc09a';ctx.lineWidth=s*0.09;
+  ctx.beginPath();ctx.moveTo(fX-s*0.01,-s*0.09);
+  ctx.quadraticCurveTo(fX-s*0.04,-s*0.26,fX-s*0.07-ew*s,-s*0.37);ctx.stroke();
+  ctx.fillStyle='#fff';ctx.beginPath();ctx.arc(fX-s*0.07-ew*s,-s*0.37,s*0.080,0,Math.PI*2);ctx.fill();
+  ctx.fillStyle='#111';ctx.beginPath();ctx.arc(fX-s*0.04-ew*s,-s*0.39,s*0.050,0,Math.PI*2);ctx.fill();
+  // 笑顔
+  ctx.strokeStyle='rgba(140,105,50,0.70)';ctx.lineWidth=0.85;ctx.lineCap='butt';
+  ctx.beginPath();ctx.arc(fX+s*0.05,s*0.04,s*0.10,0.22,Math.PI-0.22);ctx.stroke();
+  ctx.restore();
 }
 
 // ═══ DRAW ════════════════════════════════════════
@@ -786,11 +957,23 @@ function drawAjisai(isLeft){
 }
 
 function drawCeiling(){
-  const cg=ctx.createLinearGradient(0,BAR_H,0,BAR_H+CEIL_H);
-  cg.addColorStop(0,'#b89860');cg.addColorStop(0.5,'#a07848');cg.addColorStop(1,'#887040');
-  ctx.fillStyle=cg;ctx.fillRect(0,BAR_H,W,CEIL_H);
-  ctx.strokeStyle='rgba(70,45,18,0.22)';ctx.lineWidth=1;
-  for(let i=0;i<7;i++){const ly=BAR_H+i*(CEIL_H/7);ctx.beginPath();ctx.moveTo(0,ly);ctx.lineTo(W,ly);ctx.stroke();}
+  // ── 赤い瓦タイル背景 ──
+  const tileW=Math.floor(CELL*1.5),tileH=Math.floor(CELL*0.54);
+  const tcols=Math.ceil(W/tileW)+2,trows=Math.ceil(CEIL_H/tileH)+2;
+  ctx.fillStyle='#9a2215';ctx.fillRect(0,BAR_H,W,CEIL_H);
+  for(let tr=0;tr<trows;tr++){
+    const ty=BAR_H-Math.floor(tileH*0.4)+tr*tileH;
+    const sg=(tr%2)*Math.floor(tileW*0.5);
+    for(let tc=-1;tc<tcols;tc++){
+      const tx=tc*tileW-sg;
+      const tg=ctx.createLinearGradient(tx,ty,tx,ty+tileH);
+      tg.addColorStop(0,'#ca3c26');tg.addColorStop(0.45,'#b02c1a');tg.addColorStop(1,'#7c1a0c');
+      ctx.fillStyle=tg;ctx.fillRect(tx+1,ty+1,tileW-2,tileH-1);
+      ctx.fillStyle='rgba(36,5,2,0.60)';ctx.fillRect(tx,ty,tileW,1.5);   // 横目地
+      ctx.fillStyle='rgba(36,5,2,0.50)';ctx.fillRect(tx,ty,1.5,tileH);   // 縦目地
+      ctx.fillStyle='rgba(255,110,70,0.16)';ctx.fillRect(tx+2,ty+2,tileW-4,2); // ハイライト
+    }
+  }
 
   // Water stains spreading from source columns
   ctx.save();ctx.beginPath();ctx.rect(0,BAR_H,W,CEIL_H+2);ctx.clip();
@@ -829,7 +1012,7 @@ function drawCeiling(){
     ctx.beginPath();ctx.moveTo(cr.cx+cr.pts[0].x,cr.cy+cr.pts[0].y);
     for(let i=1;i<cr.pts.length;i++)ctx.lineTo(cr.cx+cr.pts[i].x,cr.cy+cr.pts[i].y);ctx.stroke();
   }
-  ctx.fillStyle='rgba(0,0,0,0.14)';ctx.fillRect(GX-2,GRID_TOP-2,COLS*CELL+4,ROWS*CELL+4);
+  ctx.fillStyle='rgba(0,0,0,0.08)';ctx.fillRect(GX-2,GRID_TOP-2,COLS*CELL+4,ROWS*CELL+4);
   for(let r=0;r<ROWS;r++)for(let c=0;c<COLS;c++)drawPipeCell(r,c);
   // パイプ出口の垂れ下がり大型水滴（天井エリアのみ）
   const curExits=getExits();
@@ -844,6 +1027,7 @@ function drawCeiling(){
     ctx.fillStyle='rgba(255,255,255,0.70)';
     ctx.beginPath();ctx.ellipse(dx-rr*0.25,dy+hang-rr*0.3,rr*0.28,rr*0.18,Math.PI*0.6,0,Math.PI*2);ctx.fill();
   }
+  if(snail&&scene==='play')drawSnailSprite();
   ctx.fillStyle='rgba(0,0,0,0.30)';ctx.fillRect(0,BAR_H+CEIL_H-5,W,5);
 }
 
@@ -851,7 +1035,7 @@ function drawPipeCell(r,c){
   const x=GX+c*CELL,y=GRID_TOP+r*CELL,cx2=x+CELL/2,cy2=y+CELL/2;
   const half=CELL/2-1,pw=Math.max(3,Math.floor(CELL*0.34));
   const offs=[[0,-1],[1,0],[0,1],[-1,0]];
-  ctx.fillStyle=(r+c)%2===0?'rgba(125,92,42,0.30)':'rgba(105,78,36,0.30)';
+  ctx.fillStyle=(r+c)%2===0?'rgba(80,18,8,0.28)':'rgba(60,12,5,0.28)';
   ctx.fillRect(x+1,y+1,CELL-2,CELL-2);
   let dispRot=gCell(r,c).rot,rotOffset=0;
   if(rotAnim&&rotAnim.r===r&&rotAnim.c===c){
