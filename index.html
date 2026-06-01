@@ -362,7 +362,9 @@ function update(dt){
     if(weatherTimer<5&&!warnPlayed){warnPlayed=true;playSE('warn');}
     if(weatherTimer<=0){
       weatherIdx++;weatherTimer=weatherIdx<3?W_DURATION[weatherIdx]:9999;warnPlayed=false;
-      weatherTransitionT=5; // フェーズ遷移後5秒かけて難易度を緩やかに上げる
+      weatherTransitionT=5;
+      // フェーズ移行救済：クールダウン中のアイテムを50%カット
+      for(const slot of itemSlots)slot.cooldownT=Math.max(0,slot.cooldownT*0.5);
       if(weatherIdx===1)SOURCE_COLS=[...new Set([...SOURCE_COLS,9])];        // 1→2列
       if(weatherIdx===2)SOURCE_COLS=[...new Set([...SOURCE_COLS,2,7])];    // 2→4列
       if(weatherIdx===3)SOURCE_COLS=[...new Set([...SOURCE_COLS,0,11])];   // 4→6列
@@ -458,7 +460,15 @@ function update(dt){
         bucket.water=Math.min(bucket.max,bucket.water+d.r*(0.7+weatherIdx*0.10));
         bucket.shakeT=0.15;
         addSplash(d.x,bucketRimY,true);
-        if(bucket.water>=bucket.max){setGameOver();return;}
+        if(bucket.water>=bucket.max){
+          // 溢れ：自動ダンプ＋床水ペナルティ（即死しない）
+          floorWater=Math.min(1,floorWater+0.10);
+          bucket.dumping=true;bucket.dumpT=0;
+          bucket.shakeT=0.40;screenShakeT=0.25;
+          playSE('dump');
+          if(floorWater>=1){setGameOver();return;}
+          caught=true;drips.splice(i,1);continue;
+        }
         playSE('drip_bucket',bucket.water/bucket.max);
         caught=true;
       }
@@ -1638,8 +1648,17 @@ function drawItemButtons(){
 
     if(deployed){
       const si=spawnedItems.find(s=>s.type===slot.type);
-      ctx.textAlign='center';ctx.fillStyle='rgba(90,170,255,0.85)';
-      ctx.font=`bold ${Math.floor(BTN_H*0.24)}px Arial`;ctx.fillText('使用中',cx2,cy2-BTN_H*0.06);
+      const canDump=si&&si.water>2;
+      ctx.textAlign='center';
+      if(canDump){
+        // 水があるとき：「💧捨てる」表示
+        const pulse=0.70+Math.sin(t*5)*0.30;
+        ctx.fillStyle=`rgba(90,200,255,${pulse})`;
+        ctx.font=`bold ${Math.floor(BTN_H*0.22)}px Arial`;ctx.fillText('💧捨てる',cx2,cy2-BTN_H*0.06);
+      }else{
+        ctx.fillStyle='rgba(90,170,255,0.85)';
+        ctx.font=`bold ${Math.floor(BTN_H*0.24)}px Arial`;ctx.fillText('使用中',cx2,cy2-BTN_H*0.06);
+      }
       if(si){
         const tr=si.timeLeft/si.dur;
         ctx.fillStyle=tr>0.35?'rgba(70,210,70,0.75)':'rgba(255,75,75,0.85)';
@@ -1990,8 +2009,18 @@ let dragging=false,draggingItemIdx=-1;
 
 function deploySlot(idx){
   const slot=itemSlots[idx];
-  if(!slot||slot.cooldownT>0)return;
-  if(spawnedItems.some(si=>si.type===slot.type))return;
+  if(!slot)return;
+  // 配置済みアイテムを再タップ → 水を捨てる
+  const existing=spawnedItems.find(si=>si.type===slot.type);
+  if(existing){
+    if(existing.water>2){
+      floorWater=Math.min(1,floorWater+0.015);
+      existing.water=0;
+      playSE('dump');
+    }
+    return;
+  }
+  if(slot.cooldownT>0)return;
   if(spawnedItems.length>=3)return;
   const iw=getItemW(slot.type);
   const positions=[W*0.22,W*0.78,W*0.50];
