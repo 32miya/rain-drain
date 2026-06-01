@@ -1721,19 +1721,28 @@ function drawItemButtons(){
     const ready=slot.cooldownT<=0&&!deployed;
     const hasBonus=ready&&comboBonusTier>0;
 
-    const sbg=hasBonus?'#2a1e00':(ready?'#182e0e':(deployed?'#0e1e30':'#141008'));
-    ctx.fillStyle=sbg;ctx.fillRect(sx+2,BTN_TOP+2,sw-4,BTN_H-4);
-    // コンボボーナス中は金色 or 紫のグロー枠
+    // 配備済みアイテムのglowTierを取得（ボーナス状態の表示に使用）
+    const deployedSi=spawnedItems.find(s=>s.type===slot.type);
+    const deployedGlowTier=deployedSi?deployedSi.glowTier||0:0;
     const bonusColors=['','rgba(255,200,40,','rgba(255,150,20,','rgba(200,60,255,'];
     const pulse2=0.5+Math.sin(t*5)*0.5;
+    // 背景色：配備中のグロー状態はsi.glowTierで判断（comboBonusTierには依存しない）
+    const sbg=hasBonus?'#2a1e00'
+              :(deployed&&deployedGlowTier>0)?'#1e1400'
+              :(ready?'#182e0e':(deployed?'#0e1e30':'#141008'));
+    ctx.fillStyle=sbg;ctx.fillRect(sx+2,BTN_TOP+2,sw-4,BTN_H-4);
+    // 枠色：配備中のボーナスアイテムはsi.glowTierの色を使用
     const sbc=hasBonus?`${bonusColors[comboBonusTier]}${0.5+pulse2*0.5})`
+              :(deployed&&deployedGlowTier>0)?`${bonusColors[deployedGlowTier]}${0.35+pulse2*0.25})`
               :ready?`rgba(70,210,70,${0.4+Math.sin(t*4)*0.2})`
               :(deployed?'rgba(70,150,255,0.32)':'rgba(70,50,22,0.35)');
-    ctx.strokeStyle=sbc;ctx.lineWidth=hasBonus?2.5:1.5;ctx.strokeRect(sx+2,BTN_TOP+2,sw-4,BTN_H-4);
-    // ボーナスの光彩
-    if(hasBonus){
-      ctx.save();ctx.globalAlpha=0.18*pulse2;
-      ctx.fillStyle=bonusColors[comboBonusTier]+'1)';
+    ctx.strokeStyle=sbc;ctx.lineWidth=(hasBonus||(deployed&&deployedGlowTier>0))?2.5:1.5;
+    ctx.strokeRect(sx+2,BTN_TOP+2,sw-4,BTN_H-4);
+    // 光彩（配備前のボーナス待機 or 配備中のボーナスアイテム）
+    if(hasBonus||(deployed&&deployedGlowTier>0)){
+      const tier=hasBonus?comboBonusTier:deployedGlowTier;
+      ctx.save();ctx.globalAlpha=0.14*pulse2;
+      ctx.fillStyle=bonusColors[tier]+'1)';
       ctx.fillRect(sx+2,BTN_TOP+2,sw-4,BTN_H-4);
       ctx.restore();
     }
@@ -1742,22 +1751,26 @@ function drawItemButtons(){
     const color=slot.type==='tub'?'#c0a820':'#7a9850';
 
     if(deployed){
-      const si=spawnedItems.find(s=>s.type===slot.type);
+      const si=deployedSi;
       const canDump=si&&si.water>2;
       ctx.textAlign='center';
       if(canDump){
-        // 水があるとき：「💧捨てる」表示
         const pulse=0.70+Math.sin(t*5)*0.30;
         ctx.fillStyle=`rgba(90,200,255,${pulse})`;
         ctx.font=`bold ${Math.floor(BTN_H*0.22)}px Arial`;ctx.fillText('💧捨てる',cx2,cy2-BTN_H*0.06);
       }else{
-        ctx.fillStyle='rgba(90,170,255,0.85)';
+        // 配備中ラベル：glowTierがあれば色をボーナスカラーに
+        const labelColor=deployedGlowTier>0?bonusColors[deployedGlowTier]+'0.95)':'rgba(90,170,255,0.85)';
+        ctx.fillStyle=labelColor;
         ctx.font=`bold ${Math.floor(BTN_H*0.24)}px Arial`;ctx.fillText('使用中',cx2,cy2-BTN_H*0.06);
       }
       if(si){
         const tr=si.timeLeft/si.dur;
         ctx.fillStyle=tr>0.35?'rgba(70,210,70,0.75)':'rgba(255,75,75,0.85)';
-        ctx.font=`${Math.floor(BTN_H*0.21)}px Arial`;ctx.fillText(`残${Math.ceil(si.timeLeft)}s`,cx2,cy2+BTN_H*0.24);
+        // 残り時間にボーナス倍率を併記（si.glowTierで判断）
+        const multSuffix=['','(×2)','(×2.5)','(×3)'][deployedGlowTier];
+        ctx.font=`${Math.floor(BTN_H*0.20)}px Arial`;
+        ctx.fillText(`残${Math.ceil(si.timeLeft)}s${multSuffix}`,cx2,cy2+BTN_H*0.24);
       }
     }else if(ready){
       const isTub2=slot.type==='tub';
