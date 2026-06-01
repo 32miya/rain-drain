@@ -2008,32 +2008,48 @@ function drawHowTo(){
 
   // 説明リスト
   const items=[
-    {icon:'🪣',text:'バケツをドラッグして\n雨水をキャッチしよう'},
-    {icon:'💧',text:'バケツが満水になったら\n「水を捨てる」ボタンを押そう'},
-    {icon:'🌊',text:'床が水浸しになると\nゲームオーバー！'},
-    {icon:'🪤',text:'桶やたらいも活用して\n雨漏りを乗り切ろう'},
+    {icon:'🪣',title:'バケツで雨水をキャッチ',
+     text:'ドラッグして雫の下に移動。満水になったら\n「水を捨てる」ボタンで空にしよう'},
+    {icon:'🛁',title:'アイテムを上手く使おう',
+     text:'ボタンでタライ・バケツを配備。\n使用中のボタンを再タップすると水を捨てられる'},
+    {icon:'🧹',title:'床の水は雑巾で拭き取れ',
+     text:'床に水が溜まったら雑巾を左右にスワイプ。\n床が満水になるとゲームオーバー！'},
+    {icon:'⚡',title:'コンボで光るアイテム解放',
+     text:'連続キャッチでコンボ発動！\n10連→2倍・15連→2.5倍・20連→3倍の耐久に'},
+    {icon:'🐌',title:'カタツムリに注意！',
+     text:'パイプ上を歩き、乗ると水が止まる。\n離れると溜まった水が一気に流れ出す！'},
   ];
-  const itemFsz=Math.floor(W*0.042);
-  const iconSz=Math.floor(W*0.065);
-  const rowH=(H*0.58)/items.length;
-  const listTop=H*0.21;
+  const itemFsz=Math.floor(W*0.037);
+  const titleFsz=Math.floor(W*0.042);
+  const iconSz=Math.floor(W*0.060);
+  const rowH=(H*0.62)/items.length;
+  const listTop=H*0.19;
   ctx.textAlign='left';
   items.forEach((item,i)=>{
-    const iy=listTop+rowH*i+rowH*0.5;
-    // 番号バッジ
+    const iy=listTop+rowH*i+rowH*0.46;
+    // アイコンバッジ
     ctx.save();
-    ctx.fillStyle='rgba(0,140,220,0.50)';
-    ctx.beginPath();ctx.arc(W*0.11,iy-itemFsz*0.3,iconSz*0.55,0,Math.PI*2);ctx.fill();
+    ctx.fillStyle='rgba(0,140,220,0.45)';
+    ctx.beginPath();ctx.arc(W*0.10,iy-itemFsz*0.1,iconSz*0.52,0,Math.PI*2);ctx.fill();
     ctx.fillStyle='#fff';ctx.font=`bold ${iconSz}px Arial`;
-    ctx.textAlign='center';ctx.fillText(item.icon,W*0.11,iy+iconSz*0.32);
+    ctx.textAlign='center';ctx.fillText(item.icon,W*0.10,iy+iconSz*0.30);
     ctx.restore();
-    // テキスト（改行対応）
+    // タイトル
+    ctx.fillStyle='rgba(120,220,255,0.95)';
+    ctx.font=`bold ${titleFsz}px Arial`;ctx.textAlign='left';
+    ctx.fillText(item.title,W*0.19,iy-itemFsz*0.55);
+    // 説明文（改行対応）
     const lines=item.text.split('\n');
-    ctx.fillStyle='rgba(210,240,255,0.90)';
-    ctx.font=`${itemFsz}px Arial`;ctx.textAlign='left';
+    ctx.fillStyle='rgba(190,228,255,0.78)';
+    ctx.font=`${itemFsz}px Arial`;
     lines.forEach((ln,li)=>{
-      ctx.fillText(ln,W*0.20,iy+(li-0.2)*itemFsz*1.4);
+      ctx.fillText(ln,W*0.19,iy+(li+0.2)*itemFsz*1.35);
     });
+    // 区切り線
+    if(i<items.length-1){
+      ctx.strokeStyle='rgba(60,140,220,0.20)';ctx.lineWidth=1;
+      ctx.beginPath();ctx.moveTo(W*0.07,iy+rowH*0.46);ctx.lineTo(W*0.93,iy+rowH*0.46);ctx.stroke();
+    }
   });
 
   // ── もどるボタン ──
